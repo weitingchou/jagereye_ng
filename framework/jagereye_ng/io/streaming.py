@@ -239,8 +239,9 @@ class VideoStreamWriter(object):
             raise RuntimeError("Stream is already opened")
 
         filename = "{}.{}".format(path, video_format)
-        fourcc = cv2.VideoWriter_fourcc(*'XVID')
-        if not self._writer.open(filename, fourcc, fps, size):
+        gst_pipeline = ('appsrc ! autovideoconvert ! x264enc ! matroskamux !'
+                        ' filesink location={}'.format(filename))
+        if not self._writer.open(gst_pipeline, 0, fps, size):
             raise RuntimeError("Can't open video file {}"
                                .format(filename))
 
