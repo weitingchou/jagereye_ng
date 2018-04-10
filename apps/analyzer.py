@@ -2,8 +2,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import asyncio
 import time
-from dask.distributed import Client
+from dask.distributed import LocalCluster, Client, as_completed
 from multiprocessing import Process, Pipe, TimeoutError
 from concurrent.futures import ThreadPoolExecutor
 from pymongo import MongoClient
@@ -12,6 +13,7 @@ from pymongo.errors import ConnectionFailure
 from intrusion_detection import IntrusionDetector
 
 from jagereye_ng import video_proc as vp
+from jagereye_ng import gpu_worker
 from jagereye_ng.api import APIConnector
 from jagereye_ng.io.streaming import VideoStreamReader, ConnectionBrokenError
 from jagereye_ng.io.notification import Notification
@@ -270,8 +272,6 @@ class AnalyzerManager(APIConnector):
             source = params["source"]
             pipelines = params["pipelines"]
 
-            check_source_connection(source["url"])
-
             # Create analyzer object
             self._analyzers[sid] = Analyzer(
                 self._cluster, sid, name, source, pipelines)
@@ -344,14 +344,7 @@ class AnalyzerManager(APIConnector):
         if sid not in self._analyzers:
             raise RuntimeError("Analyzer not found")
         else:
-            analyzer = self._analyzers[sid]
-            try:
-                check_source_connection(analyzer.source["url"])
-            except ConnectionBrokenError:
-                raise RuntimeError("Failed to establish connection to {}"
-                                   .format(analyzer.source["url"]))
-            else:
-                analyzer.start()
+            self._analyzers[sid].start()
 
     def on_stop(self, sid):
         logging.info("Stopping Analyzer: {}".format(sid))
@@ -359,3 +352,22 @@ class AnalyzerManager(APIConnector):
             raise RuntimeError("Analyzer not found")
         else:
             self._analyzers[sid].stop()
+
+
+if __name__ == "__main__":
+    cluster = LocalCluster(n_workers=0)
+
+    # Add GPU workers
+    # TODO: Get the number of GPU from configuration file
+    cluster.start_worker(name="GPU_WORKER-1", resources={"GPU": 1})
+
+    with cluster, Client(cluster.scheduler_address) as client:
+        # Initialize GPU workers
+        results = client.run(gpu_worker.init_worker, ".")
+        assert all([v == "OK" for _, v in results.items()]), "Failed to initialize GPU workers"
+
+        # Start analyzer manager
+        io_loop = asyncio.get_event_loop()
+        manager = AnalyzerManager(cluster, io_loop, ["nats://localhost:4222"])
+        io_loop.run_forever()
+        io_loop.close()
