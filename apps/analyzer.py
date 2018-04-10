@@ -4,7 +4,7 @@ from __future__ import print_function
 
 import asyncio
 import time
-from dask.distributed import LocalCluster, Client, as_completed
+from dask.distributed import LocalCluster, Client
 from multiprocessing import Process, Pipe, TimeoutError
 from concurrent.futures import ThreadPoolExecutor
 from pymongo import MongoClient
@@ -24,24 +24,6 @@ class HotReconfigurationError(Exception):
     def __str__(self):
         return ("Hot re-configuring analyzer is not allowed, please"
                 " stop analyzer first before updating it.")
-
-
-def check_source_connection(url):
-    """Check whether the source url is good.
-
-    Raises:
-        ConnectionBrokenError: Raises if VideoStreamReader can't open the
-            provided url.
-    """
-    # XXX: The function will cause an error under MacOSX, for more detail
-    #      please read "https://stackoverflow.com/questions/16254191/python-rpy2-and-matplotlib-conflict-when-using-multiprocessing"
-    reader = VideoStreamReader()
-    try:
-        reader.open(url, only_validate=True)
-    except ConnectionBrokenError:
-        raise
-    finally:
-        reader.release()
 
 
 def create_pipeline(pipelines, frame_size):
@@ -90,10 +72,13 @@ class Driver(object):
             self._driver_process = None
 
     def poll(self, timeout=None):
-        if timeout is not None:
-            return self._sig_parent.poll(timeout)
+        if self._sig_parent is not None:
+            if timeout is not None:
+                return self._sig_parent.poll(timeout)
+            else:
+                return self._sig_parent.poll()
         else:
-            return self._sig_parent.poll()
+            return False
 
     def send(self, msg):
         self._sig_parent.send(msg)
