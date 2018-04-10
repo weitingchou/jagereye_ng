@@ -1,0 +1,23 @@
+{
+    "ch_api_brain": {
+        "REQ_ANALYZER_STATUS": "request analyzer status",
+        "START_ANALYZER": "start analyzer",
+        "STOP_ANALYZER": "stop analyzer"
+    },
+    "ch_api_brain_reply": {
+        "REPLY_ANALYZER_STATUS": "reply analyzer status",
+        "ANALYZER_STOPPED": "analyzer stopped",
+        "NOT_AVAILABLE": "not available",
+        "NOT_FOUND": "not found"
+    },
+    "ch_brain_res": {
+        "CREATE_WORKER": "create worker",
+        "RESTART_WORKERS": "restart workers",
+        "REMOVE_WORKER": "remove worker"
+    },
+    "ch_res_brain": {
+        "NON_EXISTED_NAME": "non-existed name",
+        "NON_SUPPORTED_CMD": "non-supported command",
+        "OUT_OF_RESOURCE": "out of resource"
+    }
+}

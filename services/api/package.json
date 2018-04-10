@@ -1,0 +1,28 @@
+{
+    "name": "jagereye_ng",
+    "private": true,
+    "version": "0.0.1",
+    "description": "",
+    "main": "",
+    "scripts": {
+        "start": "NODE_ENV='$JAGERENV' node server.js"
+    },
+    "repository": "",
+    "keywords": [],
+    "author": "Wei-Ting Chou",
+    "devDependencies": {},
+    "dependencies": {
+        "JSONPath": "0.11.2",
+        "bluebird": "3.5.0",
+        "body-parser": "1.18.2",
+        "cors": "2.8.4",
+        "express": "4.16.1",
+        "express-validator": "4.3.0",
+        "fluent-ffmpeg": "2.1.2",
+        "http-errors": "1.6.2",
+        "mongoose": "4.13.6",
+        "nats": "0.7.24",
+        "npm": "^5.8.0",
+        "ws": "3.3.2"
+    }
+}

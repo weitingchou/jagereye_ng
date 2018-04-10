@@ -1,0 +1,20 @@
+{
+  "title": "worker_db",
+  "type": "object", 
+  "properties": {
+    "analyzer_id": {
+      "type": "string"
+    },
+    "timestamp": {
+      "type": "number"
+    },
+    "name": {
+      "type": "string"
+    },
+    "content": {
+      "type": "object"
+    }
+  }, 
+  "additionalProperties": false,
+  "required":["analyzer_id", "timestamp", "name", "content"]
+}

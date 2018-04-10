@@ -1,0 +1,35 @@
+{
+    "subdoc_source": {
+        "_id": { "auto": false },
+        "mode": {
+            "type": "String",
+            "required": true,
+            "enum": [ "file", "streaming" ]
+        },
+        "url": {
+            "type": "String",
+            "required": true
+        }
+    },
+    "subdoc_pipelines": {
+        "_id": { "auto": false },
+        "type": {
+            "type": "String",
+            "required": true,
+            "enum": [ "IntrusionDetection" ]
+        },
+        "params": {
+            "type": "Object",
+            "required": true
+        }
+    },
+    "analyzers": {
+        "name": {
+            "type": "String",
+            "required": true,
+            "unique": true
+        },
+        "source": "SUBDOC_SOURCE",
+        "pipelines": [ "SUBDOC_PIPELINES" ]
+    }
+}
