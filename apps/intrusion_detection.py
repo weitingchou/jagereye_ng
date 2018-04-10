@@ -11,7 +11,7 @@ from dask.distributed import get_client
 from jagereye_ng import video_proc as vp
 from jagereye_ng import image
 from jagereye_ng import gpu_worker
-from jagereye_ng.streaming import VideoStreamWriter
+from jagereye_ng.io.streaming import VideoStreamWriter
 from jagereye_ng import logging
 
 
@@ -112,10 +112,10 @@ class IntrusionDetector(object):
         self._state = IntrusionDetector.STATE.NORMAL
 
         # TODO: Should read options from a configuration file.
-        self._event_output_dir = "/Users/richchou/Workspace/tmp/jagereye_ng_events"
+        self._event_output_dir = "/home/jager/jagereye_events/intrusion_detection"
         video_out_options = {
             "out_dir": self._event_output_dir,
-            "video_format": "avi",
+            "video_format": "mp4",
             "fps": 15,
             "margin": 3
         }
@@ -211,6 +211,7 @@ class IntrusionDetector(object):
                                      resources={"GPU": 1})
         catched = self._check_intrusion(detect.result())
 
+        """
         drawn_images = []
         if any(catched):
             drawn_images = [vp.draw_region(
@@ -228,6 +229,7 @@ class IntrusionDetector(object):
             cv2.imshow("frame", drawn_image)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
+        """
 
         return self._output(catched, frames)
 
