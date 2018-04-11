@@ -234,11 +234,10 @@ class VideoStreamWriter(object):
         self._queue = Queue()
         self._stop_event = threading.Event()
 
-    def open(self, path, video_format, fps, size):
+    def open(self, filename, fps, size):
         if self._writer.isOpened():
             raise RuntimeError("Stream is already opened")
 
-        filename = "{}.{}".format(path, video_format)
         gst_pipeline = ('appsrc ! autovideoconvert ! x264enc ! matroskamux !'
                         ' filesink location={}'.format(filename))
         if not self._writer.open(gst_pipeline, 0, fps, size):
@@ -253,7 +252,6 @@ class VideoStreamWriter(object):
                                           self._stop_event)
         self._thread.daemon = True
         self._thread.start()
-        return filename
 
     def end(self):
         try:

@@ -26,12 +26,13 @@ class HotReconfigurationError(Exception):
                 " stop analyzer first before updating it.")
 
 
-def create_pipeline(pipelines, frame_size):
+def create_pipeline(anal_id, pipelines, frame_size):
     result = []
     for p in pipelines:
         if p["type"] == "IntrusionDetection":
             params = p["params"]
             result.append(IntrusionDetector(
+                anal_id,
                 params["roi"],
                 params["triggers"],
                 frame_size))
@@ -207,8 +208,10 @@ def analyzer_main_func(signal, cluster, anal_id, name, source, pipelines):
         src_reader.open(source["url"])
         video_info = src_reader.get_video_info()
 
-        pipelines = create_pipeline(pipelines,
-                                    video_info["frame_size"])
+        pipelines = create_pipeline(
+            anal_id,
+            pipelines,
+            video_info["frame_size"])
 
         while True:
             frames = src_reader.read(batch_size=5)

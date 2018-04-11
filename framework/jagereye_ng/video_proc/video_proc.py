@@ -22,7 +22,13 @@ def detect_motion(frames, sensitivity=80):
     if num_frames < 1:
         return []
 
-    results = [frames[0]]
+    results = {"frames": [], "index": []}
+
+    def add_to_results(frame, index):
+        results["frames"].append(frame)
+        results["index"].append(index)
+
+    add_to_results(frames[0], 0)
     last = cv2.cvtColor(frames[0].image, cv2.COLOR_BGR2GRAY)
     for i in range(1, num_frames):
         current = cv2.cvtColor(frames[i].image, cv2.COLOR_BGR2GRAY)
@@ -41,7 +47,7 @@ def detect_motion(frames, sensitivity=80):
         # Detect moving by testing whether the average of black exceeds the
         # threshold or not.
         if avg_black >= threshold:
-            results.append(frames[i])
+            add_to_results(frames[i], i)
         last = current
     return results
 

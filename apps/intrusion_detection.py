@@ -4,8 +4,8 @@ from __future__ import print_function
 
 import os
 import cv2
+import json
 from collections import deque
-from enum import Enum
 from dask.distributed import get_client
 
 from jagereye_ng import video_proc as vp
@@ -29,68 +29,156 @@ class EndOfMarginError(Exception):
     pass
 
 
-class VideoMarginWriter(object):
-    def __init__(self, out_dir, video_format, fps, margin):
-        self._writer = VideoStreamWriter()
-        self._out_dir = out_dir
-        self._video_format = video_format
-        self._fps = fps
-
-        self._max_margin_in_frames = self._fps * margin
-        self._back_margin_q = deque(maxlen=self._max_margin_in_frames)
-        self._front_margin_counter = 0
-
-    def open(self, filename, size):
-        if not isinstance(filename, str):
-            filename = "{}".format(filename)
-        filepath = os.path.join(self._out_dir, filename)
-        try:
-            filename = self._writer.open(filepath,
-                                         self._video_format,
-                                         self._fps,
-                                         size)
-        except RuntimeError as e:
-            logging.error(str(e))
-            raise
-        for _ in range(len(self._back_margin_q)):
-            self._writer.write(self._back_margin_q.popleft())
-        return filename
-
-    def append_back_margin_queue(self, frames):
-        for f in frames:
-            self._back_margin_q.append(f)
-
-    def clear_back_margin_queue(self):
-        self._back_margin_q.clear()
-
-    def reset_front_margin(self):
-        self._front_margin_counter = 0
-
-    def write(self, frames):
-        self._writer.write(frames)
-        self._front_margin_counter += len(frames)
-        if self._front_margin_counter >= self._max_margin_in_frames:
-            self._writer.end()
-            self.reset_front_margin()
-            raise EndOfMarginError()
-
-    def end(self):
-        self._writer.end()
-        self.clear_back_margin_queue()
-        self.reset_front_margin()
-
-
 class Event(object):
     def __init__(self, name, content):
         self.name = name
         self.content = content
 
 
+class EventVideoFrames(object):
+    def __init__(self, raw, metadata):
+        self.raw = raw
+        self.metadata = metadata
+        self.length = len(raw)
+
+
+class EventVideoWriter(object):
+    def __init__(self,
+                 filename,
+                 rel_out_dir,
+                 abs_out_dir,
+                 video_format,
+                 roi,
+                 fps,
+                 size,
+                 back_margin,
+                 max_margin):
+        self._max_margin = max_margin
+        self._writer = VideoStreamWriter()
+
+        self.rel_video_filename = os.path.join(rel_out_dir, "{}.{}".format(filename, video_format))
+        self.rel_metadata_filename = os.path.join(rel_out_dir, "{}.json".format(filename))
+        self.rel_thumbnail_filename = os.path.join(rel_out_dir, "{}.jpg".format(filename))
+
+        self.abs_video_filename = os.path.join(abs_out_dir, "{}.{}".format(filename, video_format))
+        self.abs_metadata_filename = os.path.join(abs_out_dir, "{}.json".format(filename))
+        self.abs_thumbnail_filename = os.path.join(abs_out_dir, "{}.jpg".format(filename))
+
+        try:
+            self._writer.open(self.abs_video_filename, fps, size)
+        except RuntimeError:
+            raise
+
+        self._front_margin_counter = 0
+        self._metadata = {"frames": [], "fps": fps, "custom": {"region": roi}}
+
+        # Flush out back margin queue
+        for i in range(len(back_margin)):
+            ev_frames = back_margin.popleft()
+            if i == 0:
+                self._metadata["start"] = float(ev_frames.raw[0].timestamp)
+            self._writer.write(ev_frames.raw)
+            self._metadata["frames"].extend(ev_frames.metadata)
+
+    def reset_front_margin(self):
+        self._front_margin_counter = 0
+
+    def write(self, ev_frames, thumbnail=False):
+        self._writer.write(ev_frames.raw)
+        self._metadata["frames"].append(ev_frames.metadata)
+        if thumbnail:
+            image.save_image(self.abs_thumbnail_filename, ev_frames.raw[0].image)
+        self._front_margin_counter += ev_frames.length
+        if self._front_margin_counter >= self._max_margin:
+            self._metadata["end"] = float(ev_frames.raw[-1].timestamp)
+            self.end()
+            raise EndOfMarginError()
+
+    def end(self):
+        self._writer.end()
+        # Write out video metadata file
+        with open(self.abs_metadata_filename, "w") as f:
+            json.dump(self._metadata, f)
+            logging.info("Saved metadata file {}".format(
+                self.abs_metadata_filename))
+
+
+class EventVideoAgent(object):
+    def __init__(self,
+                 rel_out_dir,
+                 abs_out_dir,
+                 frame_size,
+                 roi,
+                 video_format,
+                 fps,
+                 margin):
+        self._rel_out_dir = rel_out_dir
+        self._abs_out_dir = abs_out_dir
+        self._frame_size = frame_size
+        self._roi = list(roi) if isinstance(roi, tuple) else roi
+        self._video_format = video_format
+        self._fps = fps
+
+        self._max_margin_in_frames = self._fps * margin
+        self._back_margin_q = deque(maxlen=self._max_margin_in_frames)
+
+        # Create event folder if not exists
+        if not os.path.exists(self._abs_out_dir):
+            os.makedirs(self._abs_out_dir)
+
+    def create(self, filename):
+        if not isinstance(filename, str):
+            filename = str(filename)
+        try:
+            # Create video writer
+            writer = EventVideoWriter(
+                filename,
+                self._rel_out_dir,
+                self._abs_out_dir,
+                self._video_format,
+                self._roi,
+                self._fps,
+                self._frame_size,
+                self._back_margin_q.copy(),
+                self._max_margin_in_frames)
+        except RuntimeError as e:
+            logging.error(str(e))
+            raise
+        else:
+            return writer
+
+    def append_back_margin_queue(self, ev_frames):
+        self._back_margin_q.append(ev_frames)
+
+    def clear_back_margin_queue(self):
+        self._back_margin_q.clear()
+
+    def release(self):
+        self.clear_back_margin_queue()
+
+
+def gen_metadata(frames, motion, catched, mode):
+    metadata = []
+    for i in range(len(frames)):
+        try:
+            matched = catched[motion["index"].index(i)]
+        except ValueError:
+            # TODO: For non-catched case should insert None
+            metadata.append({"boxes": [], "scores": [], "labels": [], "mode": mode})
+        else:
+            matched.update({"mode": mode})
+            metadata.append(matched)
+    return metadata
+
+
 class IntrusionDetector(object):
 
-    STATE = Enum("State", "NORMAL ALERTING")
+    STATE_NORMAL = 0
+    STATE_ALERT_START = 1
+    STATE_ALERTING = 2
 
     def __init__(self,
+                 anal_id,
                  roi,
                  triggers,
                  frame_size,
@@ -100,28 +188,34 @@ class IntrusionDetector(object):
             self._client = get_client()
         except ValueError:
             raise RuntimeError("Should connect to Dask scheduler before"
-                               " initialzing this object")
+                               " initializing this object")
 
-        # TODO: detect_in_roi() should be modified to be abled to process this
-        #       roi format
+        # TODO: check_intrusion() should be modified to be abled to process
+        #       this roi format
         self._roi = (roi[0]["x"], roi[0]["y"], roi[1]["x"], roi[1]["y"])
         self._triggers = triggers
         self._frame_size = frame_size
         self._detect_threshold = detect_threshold
         self._category_index = load_category_index("./coco.labels")
-        self._state = IntrusionDetector.STATE.NORMAL
+        self._state = IntrusionDetector.STATE_NORMAL
 
-        # TODO: Should read options from a configuration file.
-        self._event_output_dir = "/home/jager/jagereye_events/intrusion_detection"
-        video_out_options = {
-            "out_dir": self._event_output_dir,
+        # TODO: Should construct the options from configuration file.
+        rel_out_dir = os.path.join("intrusion_detection", anal_id)
+        abs_out_dir = os.path.expanduser(os.path.join(
+            "~/jagereye_shared", rel_out_dir))
+        ev_options = {
+            "rel_out_dir": rel_out_dir,
+            "abs_out_dir": abs_out_dir,
+            "frame_size": frame_size,
+            "roi": self._roi,
             "video_format": "mp4",
             "fps": 15,
             "margin": 3
         }
-        self._video_out = VideoMarginWriter(**video_out_options)
-        logging.info("IntrusionDetector has been created"
-                     "(roi: {}, triggers: {}, detect_threshold: {})".format(
+        self._event_video_agent = EventVideoAgent(**ev_options)
+        self._current_writer = None
+        logging.info("Created an IntrusionDetector (roi: {}, triggers: {}"
+                     ", detect_threshold: {})".format(
                          self._roi,
                          self._triggers,
                          self._detect_threshold))
@@ -143,7 +237,8 @@ class IntrusionDetector(object):
         for i in range(len(candidates)):
             (bboxes, scores, classes, num_candidates) = candidates[i]
 
-            in_roi_labels = []
+            # TODO: Should figure out whether to use "boxes" or "bboxes"?
+            in_roi_labels = {"boxes": [], "scores": [], "labels": []}
             for j in range(int(num_candidates[0])):
                 # Check if score passes the threshold.
                 if scores[0][j] < self._detect_threshold:
@@ -165,51 +260,58 @@ class IntrusionDetector(object):
                 overlap_roi = max(0.0, min(o_xmax, r_xmax) - max(o_xmin, r_xmin)) \
                     * max(0.0, min(o_ymax, r_ymax) - max(o_ymin, r_ymin))
                 if overlap_roi > 0.0:
-                    in_roi_labels.append((label, j))
+                    in_roi_labels["boxes"].append(bboxes[0][j].tolist())
+                    in_roi_labels["scores"].append(scores[0][j].tolist())
+                    in_roi_labels["labels"].append(label)
             results.append(in_roi_labels)
         return results
 
-    def _save_snapshot(self, timestamp, snapshot):
-        snapshot_path = os.path.join(self._event_output_dir, str(timestamp.tolist()))
-        return image.save_image(snapshot_path, snapshot)
-
-    def _output(self, catched, frames):
-        self._video_out.append_back_margin_queue(frames)
+    def _output(self, catched, motion, frames):
         event = None
-        if self._state == IntrusionDetector.STATE.NORMAL:
+        ev_frames = EventVideoFrames(frames, gen_metadata(
+            frames, motion, catched, self._state))
+        if self._state == IntrusionDetector.STATE_NORMAL:
+            self._event_video_agent.append_back_margin_queue(ev_frames)
             if any(catched):
                 try:
                     timestamp = frames[0].timestamp
-                    video_name = self._video_out.open(timestamp, self._frame_size)
-                    snapshot_name = self._save_snapshot(timestamp, frames[0].image)
+                    self._current_writer = self._event_video_agent.create(
+                        timestamp)
                     logging.info("Creating event video: {}".format(timestamp))
                 except RuntimeError as e:
                     logging.error(e)
                     raise
-                event = Event("intrusion_detection_alert", content={
-                    "video_name": video_name,
-                    "snapshot_name": snapshot_name
-                })
-                self._state = IntrusionDetector.STATE.ALERTING
-        elif self._state == IntrusionDetector.STATE.ALERTING:
+                self._state = IntrusionDetector.STATE_ALERT_START
+        elif self._state == IntrusionDetector.STATE_ALERT_START:
+            self._current_writer.write(ev_frames, thumbnail=True)
+            event = Event("intrusion_detection_alert", content={
+                "video": self._current_writer.rel_video_filename,
+                "thumbnail": self._current_writer.rel_thumbnail_filename,
+                "metadata": self._current_writer.rel_metadata_filename,
+                "triggerd": ev_frames.metadata[0]["labels"]
+            })
+            self._state = IntrusionDetector.STATE_ALERTING
+        elif self._state == IntrusionDetector.STATE_ALERTING:
             if any(catched):
-                self._video_out.reset_front_margin()
+                self._current_writer.reset_front_margin()
             try:
-                self._video_out.write(frames)
+                self._current_writer.write(ev_frames)
             except EndOfMarginError:
                 logging.info("End of event video")
-                self._state = IntrusionDetector.STATE.NORMAL
+                self._event_video_agent.clear_back_margin_queue()
+                self._current_writer = None
+                self._state = IntrusionDetector.STATE_NORMAL
         else:
             assert False, "Unknown state: {}".format(self._state)
         return event
 
     def run(self, frames, motion):
-        f_motion = self._client.scatter(motion)
-        detect = self._client.submit(gpu_worker.run_model,
-                                     "object_detection",
-                                     f_motion,
-                                     resources={"GPU": 1})
-        catched = self._check_intrusion(detect.result())
+        f_motion = self._client.scatter(motion["frames"])
+        f_detect = self._client.submit(gpu_worker.run_model,
+                                       "object_detection",
+                                       f_motion,
+                                       resources={"GPU": 1})
+        catched = self._check_intrusion(f_detect.result())
 
         """
         drawn_images = []
@@ -231,8 +333,9 @@ class IntrusionDetector(object):
                 break
         """
 
-        return self._output(catched, frames)
+        return self._output(catched, motion, frames)
 
     def release(self):
-        self._video_out.end()
-        self._state = IntrusionDetector.STATE.NORMAL
+        if self._current_writer is not None:
+            self._current_writer.end()
+        self._event_video_agent.release()
