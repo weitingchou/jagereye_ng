@@ -74,7 +74,7 @@ class StreamReaderThread(threading.Thread):
                         raise ConnectionBrokenError()
                     else:
                         raise EndOfVideoError()
-                timestamp = np.array(time.time())
+                timestamp = time.time()
                 self._queue.appendleft(VideoFrame(image, timestamp))
                 time.sleep(self._cap_interval)
             logging.info("Reader thread is terminated")
