@@ -97,7 +97,7 @@ class EventVideoWriter(object):
 
     def write(self, ev_frames, thumbnail=False):
         self._writer.write(ev_frames.raw)
-        self._metadata["frames"].append(ev_frames.metadata)
+        self._metadata["frames"].extend(ev_frames.metadata)
         if thumbnail:
             image.save_image(self.abs_thumbnail_filename, ev_frames.raw[0].image)
         self._front_margin_counter += ev_frames.length
