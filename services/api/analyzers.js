@@ -1,7 +1,7 @@
 const express = require('express')
 const { body, validationResult } = require('express-validator/check')
-const httpError = require('http-errors')
 const models = require('./database')
+const { createError } = require('./utils')
 const NATS = require('nats')
 const fs = require('fs')
 const router = express.Router()
@@ -31,26 +31,6 @@ const getConfPipelineProjection = {
     'name': 0,
     'source': 0,
     'pipelines': 1
-}
-
-function createError(status, message, origErrObj) {
-    let error = new Error()
-    error.status = status
-    if (message) {
-        error.message = message
-    } else {
-        error.message = httpError(status).message
-    }
-
-    if (origErrObj) {
-        if (origErrObj.kind === 'ObjectId') {
-            error.status = 400
-            error.message = 'Invalid ObjectId format'
-        }
-        error.stack = origErrObj.stack
-    }
-
-    return error
 }
 
 function postReqValidator(req, res, next) {
