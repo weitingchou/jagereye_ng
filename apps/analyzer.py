@@ -3,7 +3,7 @@ from __future__ import division
 from __future__ import print_function
 
 import asyncio
-import time
+import time, datetime
 from dask.distributed import LocalCluster, Client
 from multiprocessing import Process, Pipe, TimeoutError
 from concurrent.futures import ThreadPoolExecutor
@@ -191,13 +191,17 @@ def analyzer_main_func(signal, cluster, anal_id, name, source, pipelines):
         return
 
     def save_event(event):
-        logging.info("Saving event: {}".format(event))
-        db_client["jager_test"]["events"].insert_one({
-            "analyzerId": anal_id,
-            "type": event.name,
-            "timestamp": time.time(),
-            "content": event.content
-        })
+        logging.info("Saving event: {}".format(str(event)))
+        try:
+            result = db_client["jager_test"]["events"].insert_one({
+                "analyzerId": anal_id,
+                "type": event.name,
+                "timestamp": event.timestamp,
+                "date": datetime.datetime.fromtimestamp(event.timestamp),
+                "content": event.content
+            })
+        except Exception as e:
+            logging.error("Failed to save event: {}".format(e))
 
     try:
         # TODO: Get the address of scheduler from the configuration

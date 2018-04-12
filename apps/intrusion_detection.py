@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import print_function
 
 import os
+import time
 import cv2
 import json
 from collections import deque
@@ -29,10 +30,18 @@ class EndOfMarginError(Exception):
     pass
 
 
-class Event(object):
-    def __init__(self, name, content):
-        self.name = name
+class IntrusionDetectionEvent(object):
+    def __init__(self, content, timestamp=None):
+        self.name = "intrusion_detection_alert"
+        self.timestamp = timestamp if timestamp is not None else time.time()
         self.content = content
+
+    def __str__(self):
+        return "name: {}, timestamp: {}, content: {}".format(
+            self.name,
+            self.timestamp,
+            self.content
+        )
 
 
 class EventVideoFrames(object):
@@ -40,6 +49,9 @@ class EventVideoFrames(object):
         self.raw = raw
         self.metadata = metadata
         self.length = len(raw)
+
+    def get_triggered(self):
+        return [m["labels"] for m in self.metadata if "labels" in m]
 
 
 class EventVideoWriter(object):
@@ -161,7 +173,7 @@ def gen_metadata(frames, motion, catched, mode):
     metadata = []
     for i in range(len(frames)):
         try:
-            matched = catched[motion["index"].index(i)]
+            matched = catched[motion["index"].index(i)].copy()
         except ValueError:
             # TODO: For non-catched case should insert None
             metadata.append({"boxes": [], "scores": [], "labels": [], "mode": mode})
@@ -220,25 +232,25 @@ class IntrusionDetector(object):
                          self._triggers,
                          self._detect_threshold))
 
-    def _check_intrusion(self, candidates):
+    def _check_intrusion(self, detections):
         """Check if the detected objects will trigger an intrusion event.
 
         Args:
-            candidates: A list of object detection result objects, each a
+            detections: A list of object detection result objects, each a
                 object of format (bboxes, scores, classes, num_detctions).
 
         Returns:
-            A list of tuple list that specifies the triggered candidates,
+            A list of tuple list that specifies the triggered detections,
             each a tuple list of format [(label, detect_index), ...].
         """
         width, height = self._frame_size
         r_xmin, r_ymin, r_xmax, r_ymax = self._roi
         results = []
-        for i in range(len(candidates)):
-            (bboxes, scores, classes, num_candidates) = candidates[i]
+        for i in range(len(detections)):
+            (bboxes, scores, classes, num_candidates) = detections[i]
 
             # TODO: Should figure out whether to use "boxes" or "bboxes"?
-            in_roi_labels = {"boxes": [], "scores": [], "labels": []}
+            in_roi_labels = {}
             for j in range(int(num_candidates[0])):
                 # Check if score passes the threshold.
                 if scores[0][j] < self._detect_threshold:
@@ -260,6 +272,8 @@ class IntrusionDetector(object):
                 overlap_roi = max(0.0, min(o_xmax, r_xmax) - max(o_xmin, r_xmin)) \
                     * max(0.0, min(o_ymax, r_ymax) - max(o_ymin, r_ymin))
                 if overlap_roi > 0.0:
+                    if not bool(in_roi_labels):
+                        in_roi_labels = {"boxes": [], "scores": [], "labels": []}
                     in_roi_labels["boxes"].append(bboxes[0][j].tolist())
                     in_roi_labels["scores"].append(scores[0][j].tolist())
                     in_roi_labels["labels"].append(label)
@@ -284,12 +298,14 @@ class IntrusionDetector(object):
                 self._state = IntrusionDetector.STATE_ALERT_START
         elif self._state == IntrusionDetector.STATE_ALERT_START:
             self._current_writer.write(ev_frames, thumbnail=True)
-            event = Event("intrusion_detection_alert", content={
-                "video": self._current_writer.rel_video_filename,
-                "thumbnail": self._current_writer.rel_thumbnail_filename,
-                "metadata": self._current_writer.rel_metadata_filename,
-                "triggerd": ev_frames.metadata[0]["labels"]
-            })
+            event = IntrusionDetectionEvent(
+                timestamp=ev_frames.raw[0].timestamp,
+                content={
+                    "video": self._current_writer.rel_video_filename,
+                    "thumbnail": self._current_writer.rel_thumbnail_filename,
+                    "metadata": self._current_writer.rel_metadata_filename,
+                    "triggered": ev_frames.get_triggered()
+                })
             self._state = IntrusionDetector.STATE_ALERTING
         elif self._state == IntrusionDetector.STATE_ALERTING:
             if any(catched):
