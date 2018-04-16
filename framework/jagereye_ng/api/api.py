@@ -11,15 +11,13 @@ from jagereye_ng.util import logging
 
 class APIConnector(object):
     def __init__(self, ch_name, io_loop, nats_hosts=["nats://127.0.0.1:4222"]):
-        self._ch_name = ch_name
         self._io_loop = io_loop
-        self._nats_hosts = nats_hosts
-        self._nats_cli = NATS()
-        self._io_loop.run_until_complete(self._setup())
+        self._nats = NATS()
+        self._io_loop.run_until_complete(self._setup(nats_hosts))
 
-    async def _setup(self):
+    async def _setup(self, ch_name, nats_hosts):
         options = {
-            "servers": self._nats_hosts,
+            "servers": nats_hosts,
             "io_loop": self._io_loop,
             "max_reconnect_attempts": 60,
             "reconnect_time_wait": 2,
@@ -29,22 +27,22 @@ class APIConnector(object):
             "closed_cb": self._closed_cb
         }
         try:
-            await self._nats_cli.connect(**options)
-            logging.info("NATS Connection for driver '{}' is "
+            await self._nats.connect(**options)
+            logging.info("NATS connection for APIConnector '{}' is "
                          "established.".format(self.__class__.__name__))
         except ErrNoServers as e:
             logging.error(e)
             raise
         else:
-            await self._nats_cli.subscribe("api.{}".format(self._ch_name),
-                                           cb=self._api_handler)
+            await self._nats.subscribe("api.{}".format(ch_name),
+                                       cb=self._api_handler)
 
     async def _disconnected_cb(self):
         logging.info("[NATS] disconnected")
 
     async def _reconnected_cb(self):
         logging.info("[NATS] reconnecting to {}".format(
-            self._nats_cli.connected_url.netloc))
+            self._nats.connected_url.netloc))
 
     async def _error_cb(self, e):
         logging.error("[NATS] {}".format(e))
@@ -83,8 +81,7 @@ class APIConnector(object):
             logging.error(e)
 
         try:
-            await self._nats_cli.publish(reply, json.dumps(response).encode())
-            # await self._nats_cli.flush(1)
+            await self._nats.publish(reply, json.dumps(response).encode())
         except ErrConnectionClosed as e:
             logging.error("Error ocurred when publishing response: {}, "
                           "ERROR: {}".format(response, e))
