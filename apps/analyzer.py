@@ -16,7 +16,7 @@ from jagereye_ng import video_proc as vp
 from jagereye_ng import gpu_worker
 from jagereye_ng.api import APIConnector
 from jagereye_ng.io.streaming import VideoStreamReader, ConnectionBrokenError
-from jagereye_ng.io.notification import Notification
+from jagereye_ng.io import notification
 from jagereye_ng import logging
 
 
@@ -179,11 +179,36 @@ def setup_db_client(host="mongodb://localhost:27017"):
         return db_client
 
 
+def push_notification(dask, anal_id, event):
+
+    def done_callback(future):
+        if future.exception() is not None:
+            logging.error("Failed to push notification: {}, error: {}"
+                          .format(event, future.exception()))
+            import traceback
+            tb = future.trackback()
+            traceback.export_tb(tb)
+
+    future = dask.submit(
+        notification.push,
+        "Analyzer",
+        {
+            "timestamp": event.timestamp,
+            "date": (datetime.datetime
+                     .fromtimestamp(event.timestamp)
+                     .strftime("%Y-%m-%d %H:%M:%S")),
+            "analyzerId": anal_id,
+            "type": event.name,
+            "content": event.content
+        },
+        resources={"PN": 1})
+    future.add_done_callback(done_callback)
+
+
 def analyzer_main_func(signal, cluster, anal_id, name, source, pipelines):
     logging.info("Starts running Analyzer: {}".format(name))
 
     executor = ThreadPoolExecutor(max_workers=1)
-    notification = Notification(["nats://localhost:4222"])
 
     try:
         db_client = setup_db_client()
@@ -225,13 +250,7 @@ def analyzer_main_func(signal, cluster, anal_id, name, source, pipelines):
 
             for event in results:
                 if event is not None:
-                    notification_msg = {
-                        "type": event.name,
-                        "analyzerId": anal_id,
-                        "name": name
-                    }
-                    notification_msg.update(event.content)
-                    notification.push("Analyzer", notification_msg)
+                    push_notification(dask, anal_id, event)
                     executor.submit(save_event, event)
 
             if signal.poll() and signal.recv() == "stop":
@@ -349,14 +368,19 @@ class AnalyzerManager(APIConnector):
 if __name__ == "__main__":
     cluster = LocalCluster(n_workers=0)
 
-    # Add GPU workers
+    # Add worker services
     # TODO: Get the number of GPU from configuration file
     cluster.start_worker(name="GPU_WORKER-1", resources={"GPU": 1})
+    cluster.start_worker(name="PN_WORKER", resources={"PN": 1})
 
     with cluster, Client(cluster.scheduler_address) as client:
         # Initialize GPU workers
         results = client.run(gpu_worker.init_worker, ".")
         assert all([v == "OK" for _, v in results.items()]), "Failed to initialize GPU workers"
+
+        # Initialize PN worker
+        results = client.run(notification.init_worker)
+        assert all([v == "OK" for _, v in results.items()]), "Failed to initialize PN worker"
 
         # Start analyzer manager
         io_loop = asyncio.get_event_loop()
