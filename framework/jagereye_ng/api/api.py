@@ -13,7 +13,7 @@ class APIConnector(object):
     def __init__(self, ch_name, io_loop, nats_hosts=["nats://127.0.0.1:4222"]):
         self._io_loop = io_loop
         self._nats = NATS()
-        self._io_loop.run_until_complete(self._setup(nats_hosts))
+        self._io_loop.run_until_complete(self._setup(ch_name, nats_hosts))
 
     async def _setup(self, ch_name, nats_hosts):
         options = {

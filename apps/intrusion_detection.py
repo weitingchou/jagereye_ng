@@ -31,28 +31,60 @@ class EndOfMarginError(Exception):
 
 
 class IntrusionDetectionEvent(object):
-    def __init__(self, content, timestamp=None):
+    def __init__(self, video, thumbnail, metadata, triggered, timestamp=None):
         self.name = "intrusion_detection_alert"
+        self.video = video
+        self.thumbnail = thumbnail
+        self.metadata = metadata
+        self.triggered = triggered
         self.timestamp = timestamp if timestamp is not None else time.time()
-        self.content = content
+
+    @property
+    def content(self):
+        content = {
+            "video": self.video,
+            "thumbnail": self.thumbnail,
+            "metadata": self.metadata,
+            "triggered": self.triggered
+        }
+        return content
 
     def __str__(self):
-        return "name: {}, timestamp: {}, content: {}".format(
-            self.name,
-            self.timestamp,
-            self.content
-        )
+        return ("name: {}, video: {}, thumbnail: {}, metadata: {}, "
+                "triggered: {}, timestamp: {}".format(
+                    self.name,
+                    self.video,
+                    self.thumbnail,
+                    self.metadata,
+                    self.triggered,
+                    self.timestamp))
 
 
 class EventVideoFrames(object):
-    def __init__(self, raw, metadata):
+    def __init__(self, raw, motion, catched, mode):
         self.raw = raw
-        self.metadata = metadata
+        self.metadata = self._gen_metadata(motion, catched, mode)
         self.length = len(raw)
 
-    def get_triggered(self):
-        return [m["labels"] for m in self.metadata if "labels" in m]
+        triggered = set()
+        for m in self.metadata:
+            if "labels" in m:
+                for label in m["labels"]:
+                    triggered.add(label)
+        self.triggered = list(triggered)
 
+    def _gen_metadata(self, motion, catched, mode):
+        metadata = []
+        for i in range(len(self.raw)):
+            try:
+                matched = catched[motion["index"].index(i)].copy()
+            except ValueError:
+                # TODO: For non-catched case should insert None
+                metadata.append({"boxes": [], "scores": [], "labels": [], "mode": mode})
+            else:
+                matched.update({"mode": mode})
+                metadata.append(matched)
+        return metadata
 
 class EventVideoWriter(object):
     def __init__(self,
@@ -169,20 +201,6 @@ class EventVideoAgent(object):
         self.clear_back_margin_queue()
 
 
-def gen_metadata(frames, motion, catched, mode):
-    metadata = []
-    for i in range(len(frames)):
-        try:
-            matched = catched[motion["index"].index(i)].copy()
-        except ValueError:
-            # TODO: For non-catched case should insert None
-            metadata.append({"boxes": [], "scores": [], "labels": [], "mode": mode})
-        else:
-            matched.update({"mode": mode})
-            metadata.append(matched)
-    return metadata
-
-
 class IntrusionDetector(object):
 
     STATE_NORMAL = 0
@@ -226,6 +244,7 @@ class IntrusionDetector(object):
         }
         self._event_video_agent = EventVideoAgent(**ev_options)
         self._current_writer = None
+        self._current_event = None
         logging.info("Created an IntrusionDetector (roi: {}, triggers: {}"
                      ", detect_threshold: {})".format(
                          self._roi,
@@ -233,7 +252,7 @@ class IntrusionDetector(object):
                          self._detect_threshold))
 
     def _check_intrusion(self, detections):
-        """Check if the detected objects will trigger an intrusion event.
+        """Check if the detected objects is an intrusion event.
 
         Args:
             detections: A list of object detection result objects, each a
@@ -281,34 +300,33 @@ class IntrusionDetector(object):
         return results
 
     def _output(self, catched, motion, frames):
-        event = None
-        ev_frames = EventVideoFrames(frames, gen_metadata(
-            frames, motion, catched, self._state))
+        ev_frames = EventVideoFrames(frames, motion, catched, self._state)
         if self._state == IntrusionDetector.STATE_NORMAL:
             self._event_video_agent.append_back_margin_queue(ev_frames)
-            if any(catched):
+            if any(ev_frames.triggered):
                 try:
-                    timestamp = frames[0].timestamp
+                    timestamp = ev_frames.raw[0].timestamp
                     self._current_writer = self._event_video_agent.create(
                         timestamp)
                     logging.info("Creating event video: {}".format(timestamp))
+                    self._current_event = IntrusionDetectionEvent(
+                        self._current_writer.rel_video_filename,
+                        None,
+                        self._current_writer.rel_metadata_filename,
+                        ev_frames.triggered,
+                        timestamp)
                 except RuntimeError as e:
                     logging.error(e)
                     raise
                 self._state = IntrusionDetector.STATE_ALERT_START
         elif self._state == IntrusionDetector.STATE_ALERT_START:
             self._current_writer.write(ev_frames, thumbnail=True)
-            event = IntrusionDetectionEvent(
-                timestamp=ev_frames.raw[0].timestamp,
-                content={
-                    "video": self._current_writer.rel_video_filename,
-                    "thumbnail": self._current_writer.rel_thumbnail_filename,
-                    "metadata": self._current_writer.rel_metadata_filename,
-                    "triggered": ev_frames.get_triggered()
-                })
+            self._current_event.thumbnail = (self._current_writer
+                                             .rel_thumbnail_filename)
             self._state = IntrusionDetector.STATE_ALERTING
+            return self._current_event
         elif self._state == IntrusionDetector.STATE_ALERTING:
-            if any(catched):
+            if any(ev_frames.triggered):
                 self._current_writer.reset_front_margin()
             try:
                 self._current_writer.write(ev_frames)
@@ -316,10 +334,10 @@ class IntrusionDetector(object):
                 logging.info("End of event video")
                 self._event_video_agent.clear_back_margin_queue()
                 self._current_writer = None
+                self._current_event = None
                 self._state = IntrusionDetector.STATE_NORMAL
         else:
             assert False, "Unknown state: {}".format(self._state)
-        return event
 
     def run(self, frames, motion):
         f_motion = self._client.scatter(motion["frames"])
