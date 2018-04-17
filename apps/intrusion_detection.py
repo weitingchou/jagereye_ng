@@ -32,7 +32,7 @@ class EndOfMarginError(Exception):
 
 class IntrusionDetectionEvent(object):
     def __init__(self, video, thumbnail, metadata, triggered, timestamp=None):
-        self.name = "intrusion_detection_alert"
+        self.name = "intrusion_detection.alert"
         self.video = video
         self.thumbnail = thumbnail
         self.metadata = metadata
