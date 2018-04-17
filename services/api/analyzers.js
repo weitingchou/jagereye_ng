@@ -314,9 +314,7 @@ function updateAnalyzer(req, res, next) {
             }
             // TODO: rollback saved record if any error occurred
             closeResponse()
-            data = result.toJSON()
-            data.status = reply['result']
-            return res.status(200).send(data)
+            return res.status(204).send()
         })
     })
 }

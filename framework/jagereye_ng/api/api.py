@@ -67,8 +67,7 @@ class APIConnector(object):
                 result = self.on_read(msg["params"])
                 response["result"] = result
             elif msg["command"] == "UPDATE":
-                result = self.on_update(msg["params"])
-                response["result"] = result
+                self.on_update(msg["params"])
             elif msg["command"] == "DELETE":
                 self.on_delete(msg["params"])
             elif msg["command"] == "START":
