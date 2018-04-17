@@ -233,9 +233,6 @@ class AnalyzerManager(APIConnector):
             # Create analyzer object
             self._analyzers[sid] = Analyzer(
                 self._cluster, sid, name, source, pipelines)
-
-            # Start analyzer
-            self._analyzers[sid].start()
         except KeyError as e:
             raise RuntimeError("Invalid request format: {}".format(e.args[0]))
         except ConnectionBrokenError:
