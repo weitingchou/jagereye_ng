@@ -6,9 +6,6 @@ import asyncio
 import time, datetime
 from dask.distributed import LocalCluster, Client
 from multiprocessing import Process, Pipe, TimeoutError
-from concurrent.futures import ThreadPoolExecutor
-from pymongo import MongoClient
-from pymongo.errors import ConnectionFailure
 
 from intrusion_detection import IntrusionDetector
 
@@ -16,7 +13,7 @@ from jagereye_ng import video_proc as vp
 from jagereye_ng import gpu_worker
 from jagereye_ng.api import APIConnector
 from jagereye_ng.io.streaming import VideoStreamReader, ConnectionBrokenError
-from jagereye_ng.io import notification
+from jagereye_ng.io import io_worker, notification, database
 from jagereye_ng import logging
 
 
@@ -167,66 +164,8 @@ class Analyzer():
             self._status = Analyzer.STATUS_STOPPED
 
 
-def setup_db_client(host="mongodb://localhost:27017"):
-    db_client = MongoClient(host)
-    try:
-        # Check if the connection is established
-        db_client.admin.command("ismaster")
-    except ConnectionFailure as e:
-        logging.error("Mongo server is not available: {}".format(e))
-        raise
-    else:
-        return db_client
-
-
-def push_notification(dask, anal_id, event):
-
-    def done_callback(future):
-        if future.exception() is not None:
-            logging.error("Failed to push notification: {}, error: {}"
-                          .format(event, future.exception()))
-            import traceback
-            tb = future.trackback()
-            traceback.export_tb(tb)
-
-    future = dask.submit(
-        notification.push,
-        "Analyzer",
-        {
-            "timestamp": event.timestamp,
-            "date": (datetime.datetime
-                     .fromtimestamp(event.timestamp)
-                     .strftime("%Y-%m-%d %H:%M:%S")),
-            "analyzerId": anal_id,
-            "type": event.name,
-            "content": event.content
-        },
-        resources={"PN": 1})
-    future.add_done_callback(done_callback)
-
-
 def analyzer_main_func(signal, cluster, anal_id, name, source, pipelines):
     logging.info("Starts running Analyzer: {}".format(name))
-
-    executor = ThreadPoolExecutor(max_workers=1)
-
-    try:
-        db_client = setup_db_client()
-    except ConnectionFailure:
-        return
-
-    def save_event(event):
-        logging.info("Saving event: {}".format(str(event)))
-        try:
-            result = db_client["jager_test"]["events"].insert_one({
-                "analyzerId": anal_id,
-                "type": event.name,
-                "timestamp": event.timestamp,
-                "date": datetime.datetime.fromtimestamp(event.timestamp),
-                "content": event.content
-            })
-        except Exception as e:
-            logging.error("Failed to save event: {}".format(e))
 
     try:
         # TODO: Get the address of scheduler from the configuration
@@ -250,22 +189,30 @@ def analyzer_main_func(signal, cluster, anal_id, name, source, pipelines):
 
             for event in results:
                 if event is not None:
-                    push_notification(dask, anal_id, event)
-                    executor.submit(save_event, event)
+                    message = {
+                        "analyzerId": anal_id,
+                        "timestamp": event.timestamp,
+                        "date": (datetime.datetime
+                                 .fromtimestamp(event.timestamp)
+                                 .strftime("%Y-%m-%d %H:%M:%S")),
+                        "type": event.name,
+                        "content": event.content
+                    }
+                    notification.push("Analyzer", message, dask)
+                    database.save_event(message, dask)
 
             if signal.poll() and signal.recv() == "stop":
                 break
     except ConnectionBrokenError:
         logging.error("Error occurred when trying to connect to source {}"
                       .format(source["url"]))
-        # TODO: Should push a notifcation of this error
+        # TODO: Should push a notification of this error
         signal.send("source_down")
     finally:
         src_reader.release()
         for p in pipelines:
             p.release()
         dask.close()
-        executor.shutdown()
         logging.info("Analyzer terminated: {}".format(name))
 
 
@@ -371,16 +318,16 @@ if __name__ == "__main__":
     # Add worker services
     # TODO: Get the number of GPU from configuration file
     cluster.start_worker(name="GPU_WORKER-1", resources={"GPU": 1})
-    cluster.start_worker(name="PN_WORKER", resources={"PN": 1})
+    cluster.start_worker(name="IO_WORKER-1", resources={"IO": 1})
 
     with cluster, Client(cluster.scheduler_address) as client:
         # Initialize GPU workers
         results = client.run(gpu_worker.init_worker, ".")
         assert all([v == "OK" for _, v in results.items()]), "Failed to initialize GPU workers"
 
-        # Initialize PN worker
-        results = client.run(notification.init_worker)
-        assert all([v == "OK" for _, v in results.items()]), "Failed to initialize PN worker"
+        # Initialize IO worker
+        results = client.run(io_worker.init_worker)
+        assert all([v == "OK" for _, v in results.items()]), "Failed to initialize IO worker"
 
         # Start analyzer manager
         io_loop = asyncio.get_event_loop()
