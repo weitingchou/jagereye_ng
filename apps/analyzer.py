@@ -155,13 +155,16 @@ class Analyzer():
                                self._name,
                                self._source,
                                self._pipelines)
-            self._status = Analyzer.STATUS_RUNNING
+            if self._driver.poll(10) and self._driver.recv() == "ready":
+                self._status = Analyzer.STATUS_RUNNING
+            else:
+                self._status = Analyzer.STATUS_SRC_DOWN
 
     def stop(self):
         if self._status == Analyzer.STATUS_RUNNING:
             self._driver.send("stop")
             self._driver.terminate()
-            self._status = Analyzer.STATUS_STOPPED
+        self._status = Analyzer.STATUS_STOPPED
 
 
 def analyzer_main_func(signal, cluster, anal_id, name, source, pipelines):
@@ -180,6 +183,8 @@ def analyzer_main_func(signal, cluster, anal_id, name, source, pipelines):
             anal_id,
             pipelines,
             video_info["frame_size"])
+
+        signal.send("ready")
 
         while True:
             frames = src_reader.read(batch_size=5)
