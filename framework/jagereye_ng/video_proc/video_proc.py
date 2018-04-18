@@ -50,14 +50,3 @@ def detect_motion(frames, sensitivity=80):
             add_to_results(frames[i], i)
         last = current
     return results
-
-
-def draw_region(frame, region, color, alpha=0.5):
-    (xmin, ymin, xmax, ymax) = region
-    src_image = frame.image
-    drawn_image = src_image.astype(np.uint32).copy()
-    for c in range(3):
-        drawn_image[ymin:ymax, xmin:xmax, c] = \
-            src_image[ymin:ymax, xmin:xmax, c] * (1 - alpha) \
-            + alpha * color[c] * 255
-    return drawn_image.astype(np.uint8)

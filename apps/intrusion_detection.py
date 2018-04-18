@@ -10,8 +10,7 @@ from collections import deque
 from dask.distributed import get_client
 from shapely import geometry
 
-from jagereye_ng import video_proc as vp
-from jagereye_ng import image
+from jagereye_ng import image as im
 from jagereye_ng import gpu_worker
 from jagereye_ng.io.streaming import VideoStreamWriter
 from jagereye_ng import logging
@@ -88,6 +87,10 @@ class EventVideoFrames(object):
         return metadata
 
 class EventVideoWriter(object):
+
+    EVENT_NORMAL_COLOR = (139, 195, 74)
+    EVENT_ALERT_COLOR = (34, 87, 255)
+
     def __init__(self,
                  filename,
                  rel_out_dir,
@@ -98,6 +101,7 @@ class EventVideoWriter(object):
                  size,
                  back_margin,
                  max_margin):
+        self._roi = roi
         self._max_margin = max_margin
         self._writer = VideoStreamWriter()
 
@@ -140,7 +144,11 @@ class EventVideoWriter(object):
         self._metadata["intrusion_detection"]["frames"].extend(
             ev_frames.metadata)
         if thumbnail:
-            image.save_image(self.abs_thumbnail_filename, ev_frames.raw[0].image)
+            drawn_image = im.draw_region(ev_frames.raw[0].image,
+                                         self._roi,
+                                         EventVideoWriter.EVENT_ALERT_COLOR,
+                                         0.4)
+            im.save_image(self.abs_thumbnail_filename, drawn_image)
         self._front_margin_counter += ev_frames.length
         if self._front_margin_counter >= self._max_margin:
             self._metadata["end"] = float(ev_frames.raw[-1].timestamp)
@@ -168,7 +176,7 @@ class EventVideoAgent(object):
         self._rel_out_dir = rel_out_dir
         self._abs_out_dir = abs_out_dir
         self._frame_size = frame_size
-        self._roi = list(roi) if isinstance(roi, tuple) else roi
+        self._roi = roi
         self._video_format = video_format
         self._fps = fps
 
@@ -386,27 +394,6 @@ class IntrusionDetector(object):
                                        f_motion,
                                        resources={"GPU": 1})
         catched = self._check_intrusion(f_detect.result())
-
-        """
-        drawn_images = []
-        if any(catched):
-            drawn_images = [vp.draw_region(
-                frame,
-                self._roi,
-                (66, 194, 244))
-                for frame in frames]
-        else:
-            drawn_images = [vp.draw_region(
-                frame,
-                self._roi,
-                (226, 137, 59))
-                for frame in frames]
-        for drawn_image in drawn_images:
-            cv2.imshow("frame", drawn_image)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
-        """
-
         return self._output(catched, motion, frames)
 
     def release(self):
