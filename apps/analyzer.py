@@ -6,9 +6,6 @@ import asyncio
 import time, datetime
 from dask.distributed import LocalCluster, Client
 from multiprocessing import Process, Pipe, TimeoutError
-from concurrent.futures import ThreadPoolExecutor
-from pymongo import MongoClient
-from pymongo.errors import ConnectionFailure
 
 from intrusion_detection import IntrusionDetector
 
@@ -16,7 +13,7 @@ from jagereye_ng import video_proc as vp
 from jagereye_ng import gpu_worker
 from jagereye_ng.api import APIConnector
 from jagereye_ng.io.streaming import VideoStreamReader, ConnectionBrokenError
-from jagereye_ng.io.notification import Notification
+from jagereye_ng.io import io_worker, notification, database
 from jagereye_ng import logging
 
 
@@ -158,50 +155,20 @@ class Analyzer():
                                self._name,
                                self._source,
                                self._pipelines)
-            self._status = Analyzer.STATUS_RUNNING
+            if self._driver.poll(10) and self._driver.recv() == "ready":
+                self._status = Analyzer.STATUS_RUNNING
+            else:
+                self._status = Analyzer.STATUS_SRC_DOWN
 
     def stop(self):
         if self._status == Analyzer.STATUS_RUNNING:
             self._driver.send("stop")
             self._driver.terminate()
-            self._status = Analyzer.STATUS_STOPPED
-
-
-def setup_db_client(host="mongodb://localhost:27017"):
-    db_client = MongoClient(host)
-    try:
-        # Check if the connection is established
-        db_client.admin.command("ismaster")
-    except ConnectionFailure as e:
-        logging.error("Mongo server is not available: {}".format(e))
-        raise
-    else:
-        return db_client
+        self._status = Analyzer.STATUS_STOPPED
 
 
 def analyzer_main_func(signal, cluster, anal_id, name, source, pipelines):
     logging.info("Starts running Analyzer: {}".format(name))
-
-    executor = ThreadPoolExecutor(max_workers=1)
-    notification = Notification(["nats://localhost:4222"])
-
-    try:
-        db_client = setup_db_client()
-    except ConnectionFailure:
-        return
-
-    def save_event(event):
-        logging.info("Saving event: {}".format(str(event)))
-        try:
-            result = db_client["jager_test"]["events"].insert_one({
-                "analyzerId": anal_id,
-                "type": event.name,
-                "timestamp": event.timestamp,
-                "date": datetime.datetime.fromtimestamp(event.timestamp),
-                "content": event.content
-            })
-        except Exception as e:
-            logging.error("Failed to save event: {}".format(e))
 
     try:
         # TODO: Get the address of scheduler from the configuration
@@ -217,6 +184,8 @@ def analyzer_main_func(signal, cluster, anal_id, name, source, pipelines):
             pipelines,
             video_info["frame_size"])
 
+        signal.send("ready")
+
         while True:
             frames = src_reader.read(batch_size=5)
             motion = vp.detect_motion(frames)
@@ -225,28 +194,30 @@ def analyzer_main_func(signal, cluster, anal_id, name, source, pipelines):
 
             for event in results:
                 if event is not None:
-                    notification_msg = {
-                        "type": event.name,
+                    message = {
                         "analyzerId": anal_id,
-                        "name": name
+                        "timestamp": event.timestamp,
+                        "date": (datetime.datetime
+                                 .fromtimestamp(event.timestamp)
+                                 .strftime("%Y-%m-%d %H:%M:%S")),
+                        "type": event.name,
+                        "content": event.content
                     }
-                    notification_msg.update(event.content)
-                    notification.push("Analyzer", notification_msg)
-                    executor.submit(save_event, event)
+                    notification.push("Analyzer", message, dask)
+                    database.save_event(message, dask)
 
             if signal.poll() and signal.recv() == "stop":
                 break
     except ConnectionBrokenError:
         logging.error("Error occurred when trying to connect to source {}"
                       .format(source["url"]))
-        # TODO: Should push a notifcation of this error
+        # TODO: Should push a notification of this error
         signal.send("source_down")
     finally:
         src_reader.release()
         for p in pipelines:
             p.release()
         dask.close()
-        executor.shutdown()
         logging.info("Analyzer terminated: {}".format(name))
 
 
@@ -267,9 +238,6 @@ class AnalyzerManager(APIConnector):
             # Create analyzer object
             self._analyzers[sid] = Analyzer(
                 self._cluster, sid, name, source, pipelines)
-
-            # Start analyzer
-            self._analyzers[sid].start()
         except KeyError as e:
             raise RuntimeError("Invalid request format: {}".format(e.args[0]))
         except ConnectionBrokenError:
@@ -349,14 +317,19 @@ class AnalyzerManager(APIConnector):
 if __name__ == "__main__":
     cluster = LocalCluster(n_workers=0)
 
-    # Add GPU workers
+    # Add worker services
     # TODO: Get the number of GPU from configuration file
     cluster.start_worker(name="GPU_WORKER-1", resources={"GPU": 1})
+    cluster.start_worker(name="IO_WORKER-1", resources={"IO": 1})
 
     with cluster, Client(cluster.scheduler_address) as client:
         # Initialize GPU workers
         results = client.run(gpu_worker.init_worker, ".")
         assert all([v == "OK" for _, v in results.items()]), "Failed to initialize GPU workers"
+
+        # Initialize IO worker
+        results = client.run(io_worker.init_worker)
+        assert all([v == "OK" for _, v in results.items()]), "Failed to initialize IO worker"
 
         # Start analyzer manager
         io_loop = asyncio.get_event_loop()

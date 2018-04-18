@@ -28,10 +28,9 @@ function notifying(event, callback) {
 }
 
 function notificationHandler(request) {
+    console.log(`Publishing notification: ${request}`)
     notifying(request, (err) => {
-        if (err) {
-            return console.error(err)
-        }
+        if (err) { return console.error(err) }
     })
 }
 
@@ -60,7 +59,7 @@ function start() {
     wsServer.on('error', (err) => {
         // TODO: log error
     })
-    nats.subscribe('ch_notification', notificationHandler)
+    nats.subscribe('notification', notificationHandler)
     const heartbeatTimer = setInterval(function ping() {
         wsServer.clients.forEach((client) => {
             if (client.isAlive === false) {

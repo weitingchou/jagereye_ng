@@ -8,6 +8,7 @@ import cv2
 import json
 from collections import deque
 from dask.distributed import get_client
+from shapely import geometry
 
 from jagereye_ng import video_proc as vp
 from jagereye_ng import image
@@ -31,28 +32,60 @@ class EndOfMarginError(Exception):
 
 
 class IntrusionDetectionEvent(object):
-    def __init__(self, content, timestamp=None):
-        self.name = "intrusion_detection_alert"
+    def __init__(self, video, thumbnail, metadata, triggered, timestamp=None):
+        self.name = "intrusion_detection.alert"
+        self.video = video
+        self.thumbnail = thumbnail
+        self.metadata = metadata
+        self.triggered = triggered
         self.timestamp = timestamp if timestamp is not None else time.time()
-        self.content = content
+
+    @property
+    def content(self):
+        content = {
+            "video": self.video,
+            "thumbnail": self.thumbnail,
+            "metadata": self.metadata,
+            "triggered": self.triggered
+        }
+        return content
 
     def __str__(self):
-        return "name: {}, timestamp: {}, content: {}".format(
-            self.name,
-            self.timestamp,
-            self.content
-        )
+        return ("name: {}, video: {}, thumbnail: {}, metadata: {}, "
+                "triggered: {}, timestamp: {}".format(
+                    self.name,
+                    self.video,
+                    self.thumbnail,
+                    self.metadata,
+                    self.triggered,
+                    self.timestamp))
 
 
 class EventVideoFrames(object):
-    def __init__(self, raw, metadata):
+    def __init__(self, raw, motion, catched, mode):
         self.raw = raw
-        self.metadata = metadata
+        self.metadata = self._gen_metadata(motion, catched, mode)
         self.length = len(raw)
 
-    def get_triggered(self):
-        return [m["labels"] for m in self.metadata if "labels" in m]
+        triggered = set()
+        for m in self.metadata:
+            if "labels" in m:
+                for label in m["labels"]:
+                    triggered.add(label)
+        self.triggered = list(triggered)
 
+    def _gen_metadata(self, motion, catched, mode):
+        metadata = []
+        for i in range(len(self.raw)):
+            try:
+                matched = catched[motion["index"].index(i)].copy()
+            except ValueError:
+                # TODO: For non-catched case should insert None
+                metadata.append({"bboxes": [], "scores": [], "labels": [], "mode": mode})
+            else:
+                matched.update({"mode": mode})
+                metadata.append(matched)
+        return metadata
 
 class EventVideoWriter(object):
     def __init__(self,
@@ -82,7 +115,13 @@ class EventVideoWriter(object):
             raise
 
         self._front_margin_counter = 0
-        self._metadata = {"frames": [], "fps": fps, "custom": {"region": roi}}
+        self._metadata = {
+            "intrusion_detection": {
+                "frames": [],
+                "custom": {"roi": roi}
+            },
+            "fps": fps
+        }
 
         # Flush out back margin queue
         for i in range(len(back_margin)):
@@ -90,14 +129,16 @@ class EventVideoWriter(object):
             if i == 0:
                 self._metadata["start"] = float(ev_frames.raw[0].timestamp)
             self._writer.write(ev_frames.raw)
-            self._metadata["frames"].extend(ev_frames.metadata)
+            self._metadata["intrusion_detection"]["frames"].extend(
+                ev_frames.metadata)
 
     def reset_front_margin(self):
         self._front_margin_counter = 0
 
     def write(self, ev_frames, thumbnail=False):
         self._writer.write(ev_frames.raw)
-        self._metadata["frames"].extend(ev_frames.metadata)
+        self._metadata["intrusion_detection"]["frames"].extend(
+            ev_frames.metadata)
         if thumbnail:
             image.save_image(self.abs_thumbnail_filename, ev_frames.raw[0].image)
         self._front_margin_counter += ev_frames.length
@@ -169,20 +210,6 @@ class EventVideoAgent(object):
         self.clear_back_margin_queue()
 
 
-def gen_metadata(frames, motion, catched, mode):
-    metadata = []
-    for i in range(len(frames)):
-        try:
-            matched = catched[motion["index"].index(i)].copy()
-        except ValueError:
-            # TODO: For non-catched case should insert None
-            metadata.append({"boxes": [], "scores": [], "labels": [], "mode": mode})
-        else:
-            matched.update({"mode": mode})
-            metadata.append(matched)
-    return metadata
-
-
 class IntrusionDetector(object):
 
     STATE_NORMAL = 0
@@ -195,6 +222,20 @@ class IntrusionDetector(object):
                  triggers,
                  frame_size,
                  detect_threshold=0.25):
+        """ Create a new IntrusionDetector instance.
+
+        Args:
+            anal_id (string): The ID of the analyzer that this detector attached
+                for.
+            roi (list of object): The region of interest with format of a list
+                point objects, such as [{"x": 1, "y":1}, {"x": 2, "y": 2}, ...]
+            triggers (list of string): The target of interest.
+            frame_size (tuple): The frame size of input image frames with format
+                (width, height).
+            detect_threshold (number): The threshold of the detected object
+                score.
+
+        """
         try:
             # Get Dask client
             self._client = get_client()
@@ -202,9 +243,8 @@ class IntrusionDetector(object):
             raise RuntimeError("Should connect to Dask scheduler before"
                                " initializing this object")
 
-        # TODO: check_intrusion() should be modified to be abled to process
-        #       this roi format
-        self._roi = (roi[0]["x"], roi[0]["y"], roi[1]["x"], roi[1]["y"])
+        self._roi = tuple([(r["x"], r["y"]) for r in roi])
+        self._roi_polygon = geometry.Polygon(self._roi)
         self._triggers = triggers
         self._frame_size = frame_size
         self._detect_threshold = detect_threshold
@@ -226,14 +266,35 @@ class IntrusionDetector(object):
         }
         self._event_video_agent = EventVideoAgent(**ev_options)
         self._current_writer = None
+        self._current_event = None
         logging.info("Created an IntrusionDetector (roi: {}, triggers: {}"
                      ", detect_threshold: {})".format(
                          self._roi,
                          self._triggers,
                          self._detect_threshold))
 
+    def _is_in_roi(self, bbox, threshold=0.0):
+        """Check whether a bbox is in the roi or not.
+
+        Args:
+            bbox (tuple): The bounding box of format:
+                xmin (int): The left position.
+                ymin (int): The top position.
+                xmax (int): The right position.
+                ymax (int): The bottom postion.
+            threshold: The overlap threshold.
+
+        Returns:
+            True if bbox is in the roi and false otherwise.
+        """
+        (xmin, ymin, xmax, ymax) = bbox
+        obj_polygon = geometry.Polygon([[xmin, ymin], [xmax, ymin],
+                                        [xmax, ymax], [xmin, ymax]])
+        overlap_area = self._roi_polygon.intersection(obj_polygon).area
+        return overlap_area > threshold
+
     def _check_intrusion(self, detections):
-        """Check if the detected objects will trigger an intrusion event.
+        """Check if the detected objects is an intrusion event.
 
         Args:
             detections: A list of object detection result objects, each a
@@ -244,13 +305,12 @@ class IntrusionDetector(object):
             each a tuple list of format [(label, detect_index), ...].
         """
         width, height = self._frame_size
-        r_xmin, r_ymin, r_xmax, r_ymax = self._roi
+
         results = []
         for i in range(len(detections)):
             (bboxes, scores, classes, num_candidates) = detections[i]
 
-            # TODO: Should figure out whether to use "boxes" or "bboxes"?
-            in_roi_labels = {}
+            in_roi_cands = {}
             for j in range(int(num_candidates[0])):
                 # Check if score passes the threshold.
                 if scores[0][j] < self._detect_threshold:
@@ -265,50 +325,48 @@ class IntrusionDetector(object):
                 else:
                     if label not in self._triggers:
                         continue
-                # Check whether the object is in roi or not.
-                o_ymin, o_xmin, o_ymax, o_xmax = bboxes[0][j]
-                o_xmin, o_ymin, o_xmax, o_ymax = (o_xmin * width, o_ymin * height,
-                                                  o_xmax * width, o_ymax * height)
-                overlap_roi = max(0.0, min(o_xmax, r_xmax) - max(o_xmin, r_xmin)) \
-                    * max(0.0, min(o_ymax, r_ymax) - max(o_ymin, r_ymin))
-                if overlap_roi > 0.0:
-                    if not bool(in_roi_labels):
-                        in_roi_labels = {"boxes": [], "scores": [], "labels": []}
-                    in_roi_labels["boxes"].append(bboxes[0][j].tolist())
-                    in_roi_labels["scores"].append(scores[0][j].tolist())
-                    in_roi_labels["labels"].append(label)
-            results.append(in_roi_labels)
+                # Check whether the object's bbox is in roi or not.
+                ymin, xmin, ymax, xmax = bboxes[0][j]
+                unnormalized_bbox = (xmin * width, ymin * height,
+                                     xmax * width, ymax * height)
+                if self._is_in_roi(unnormalized_bbox):
+                    if not bool(in_roi_cands):
+                        # This is the first detected object candidate
+                        in_roi_cands = {"bboxes": [], "scores": [], "labels": []}
+                    in_roi_cands["bboxes"].append(bboxes[0][j].tolist())
+                    in_roi_cands["scores"].append(scores[0][j].tolist())
+                    in_roi_cands["labels"].append(label)
+            results.append(in_roi_cands)
         return results
 
     def _output(self, catched, motion, frames):
-        event = None
-        ev_frames = EventVideoFrames(frames, gen_metadata(
-            frames, motion, catched, self._state))
+        ev_frames = EventVideoFrames(frames, motion, catched, self._state)
         if self._state == IntrusionDetector.STATE_NORMAL:
             self._event_video_agent.append_back_margin_queue(ev_frames)
-            if any(catched):
+            if any(ev_frames.triggered):
                 try:
-                    timestamp = frames[0].timestamp
+                    timestamp = ev_frames.raw[0].timestamp
                     self._current_writer = self._event_video_agent.create(
                         timestamp)
                     logging.info("Creating event video: {}".format(timestamp))
+                    self._current_event = IntrusionDetectionEvent(
+                        self._current_writer.rel_video_filename,
+                        None,
+                        self._current_writer.rel_metadata_filename,
+                        ev_frames.triggered,
+                        timestamp)
                 except RuntimeError as e:
                     logging.error(e)
                     raise
                 self._state = IntrusionDetector.STATE_ALERT_START
         elif self._state == IntrusionDetector.STATE_ALERT_START:
             self._current_writer.write(ev_frames, thumbnail=True)
-            event = IntrusionDetectionEvent(
-                timestamp=ev_frames.raw[0].timestamp,
-                content={
-                    "video": self._current_writer.rel_video_filename,
-                    "thumbnail": self._current_writer.rel_thumbnail_filename,
-                    "metadata": self._current_writer.rel_metadata_filename,
-                    "triggered": ev_frames.get_triggered()
-                })
+            self._current_event.thumbnail = (self._current_writer
+                                             .rel_thumbnail_filename)
             self._state = IntrusionDetector.STATE_ALERTING
+            return self._current_event
         elif self._state == IntrusionDetector.STATE_ALERTING:
-            if any(catched):
+            if any(ev_frames.triggered):
                 self._current_writer.reset_front_margin()
             try:
                 self._current_writer.write(ev_frames)
@@ -316,10 +374,10 @@ class IntrusionDetector(object):
                 logging.info("End of event video")
                 self._event_video_agent.clear_back_margin_queue()
                 self._current_writer = None
+                self._current_event = None
                 self._state = IntrusionDetector.STATE_NORMAL
         else:
             assert False, "Unknown state: {}".format(self._state)
-        return event
 
     def run(self, frames, motion):
         f_motion = self._client.scatter(motion["frames"])

@@ -23,7 +23,7 @@ class ModelPath(object):
 def init_worker(model_dir):
     worker = get_worker()
     if hasattr(worker, "name") and worker.name.startswith("GPU_WORKER"):
-        logging.info("Initializing GPU worker: {}".format(worker.name))
+        logging.info("Initializing worker: {}".format(worker.name))
         model_path = ModelPath(model_dir)
 
         from jagereye_ng import models
