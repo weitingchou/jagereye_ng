@@ -8,6 +8,7 @@ import cv2
 import json
 from collections import deque
 from dask.distributed import get_client
+from shapely import geometry
 
 from jagereye_ng import video_proc as vp
 from jagereye_ng import image
@@ -213,6 +214,20 @@ class IntrusionDetector(object):
                  triggers,
                  frame_size,
                  detect_threshold=0.25):
+        """ Create a new IntrusionDetector instance.
+
+        Args:
+            anal_id (string): The ID of the analyzer that this detector attached
+                for.
+            roi (list of object): The region of interest with format of a list
+                point objects, such as [{"x": 1, "y":1}, {"x": 2, "y": 2}, ...]
+            triggers (list of string): The target of interest.
+            frame_size (tuple): The frame size of input image frames with format
+                (width, height).
+            detect_threshold (number): The threshold of the detected object
+                score.
+
+        """
         try:
             # Get Dask client
             self._client = get_client()
@@ -220,9 +235,8 @@ class IntrusionDetector(object):
             raise RuntimeError("Should connect to Dask scheduler before"
                                " initializing this object")
 
-        # TODO: check_intrusion() should be modified to be abled to process
-        #       this roi format
-        self._roi = (roi[0]["x"], roi[0]["y"], roi[1]["x"], roi[1]["y"])
+        self._roi = tuple([(r["x"], r["y"]) for r in roi])
+        self._roi_polygon = geometry.Polygon(self._roi)
         self._triggers = triggers
         self._frame_size = frame_size
         self._detect_threshold = detect_threshold
@@ -251,6 +265,26 @@ class IntrusionDetector(object):
                          self._triggers,
                          self._detect_threshold))
 
+    def _is_in_roi(self, bbox, threshold=0.0):
+        """Check whether a bbox is in the roi or not.
+
+        Args:
+            bbox (tuple): The bounding box of format:
+                xmin (int): The left position.
+                ymin (int): The top position.
+                xmax (int): The right position.
+                ymax (int): The bottom postion.
+            threshold: The overlap threshold.
+
+        Returns:
+            True if bbox is in the roi and false otherwise.
+        """
+        (xmin, ymin, xmax, ymax) = bbox
+        obj_polygon = geometry.Polygon([[xmin, ymin], [xmax, ymin],
+                                        [xmax, ymax], [xmin, ymax]])
+        overlap_area = self._roi_polygon.intersection(obj_polygon).area
+        return overlap_area > threshold
+
     def _check_intrusion(self, detections):
         """Check if the detected objects is an intrusion event.
 
@@ -263,13 +297,12 @@ class IntrusionDetector(object):
             each a tuple list of format [(label, detect_index), ...].
         """
         width, height = self._frame_size
-        r_xmin, r_ymin, r_xmax, r_ymax = self._roi
+
         results = []
         for i in range(len(detections)):
             (bboxes, scores, classes, num_candidates) = detections[i]
 
-            # TODO: Should figure out whether to use "boxes" or "bboxes"?
-            in_roi_labels = {}
+            in_roi_cands = {}
             for j in range(int(num_candidates[0])):
                 # Check if score passes the threshold.
                 if scores[0][j] < self._detect_threshold:
@@ -284,19 +317,20 @@ class IntrusionDetector(object):
                 else:
                     if label not in self._triggers:
                         continue
-                # Check whether the object is in roi or not.
-                o_ymin, o_xmin, o_ymax, o_xmax = bboxes[0][j]
-                o_xmin, o_ymin, o_xmax, o_ymax = (o_xmin * width, o_ymin * height,
-                                                  o_xmax * width, o_ymax * height)
-                overlap_roi = max(0.0, min(o_xmax, r_xmax) - max(o_xmin, r_xmin)) \
-                    * max(0.0, min(o_ymax, r_ymax) - max(o_ymin, r_ymin))
-                if overlap_roi > 0.0:
-                    if not bool(in_roi_labels):
-                        in_roi_labels = {"boxes": [], "scores": [], "labels": []}
-                    in_roi_labels["boxes"].append(bboxes[0][j].tolist())
-                    in_roi_labels["scores"].append(scores[0][j].tolist())
-                    in_roi_labels["labels"].append(label)
-            results.append(in_roi_labels)
+                # Check whether the object's bbox is in roi or not.
+                ymin, xmin, ymax, xmax = bboxes[0][j]
+                unnormalized_bbox = (xmin * width, ymin * height,
+                                     xmax * width, ymax * height)
+                if self._is_in_roi(unnormalized_bbox):
+                    if not bool(in_roi_cands):
+                        # This is the first detected object candidate
+                        # TODO: Should figure out whether to use "boxes" or
+                        #       "bboxes"?
+                        in_roi_cands = {"boxes": [], "scores": [], "labels": []}
+                    in_roi_cands["boxes"].append(bboxes[0][j].tolist())
+                    in_roi_cands["scores"].append(scores[0][j].tolist())
+                    in_roi_cands["labels"].append(label)
+            results.append(in_roi_cands)
         return results
 
     def _output(self, catched, motion, frames):
