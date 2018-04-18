@@ -81,7 +81,7 @@ class EventVideoFrames(object):
                 matched = catched[motion["index"].index(i)].copy()
             except ValueError:
                 # TODO: For non-catched case should insert None
-                metadata.append({"boxes": [], "scores": [], "labels": [], "mode": mode})
+                metadata.append({"bboxes": [], "scores": [], "labels": [], "mode": mode})
             else:
                 matched.update({"mode": mode})
                 metadata.append(matched)
@@ -115,7 +115,13 @@ class EventVideoWriter(object):
             raise
 
         self._front_margin_counter = 0
-        self._metadata = {"frames": [], "fps": fps, "custom": {"region": roi}}
+        self._metadata = {
+            "intrusion_detection": {
+                "frames": [],
+                "custom": {"roi": roi}
+            },
+            "fps": fps
+        }
 
         # Flush out back margin queue
         for i in range(len(back_margin)):
@@ -123,14 +129,16 @@ class EventVideoWriter(object):
             if i == 0:
                 self._metadata["start"] = float(ev_frames.raw[0].timestamp)
             self._writer.write(ev_frames.raw)
-            self._metadata["frames"].extend(ev_frames.metadata)
+            self._metadata["intrusion_detection"]["frames"].extend(
+                ev_frames.metadata)
 
     def reset_front_margin(self):
         self._front_margin_counter = 0
 
     def write(self, ev_frames, thumbnail=False):
         self._writer.write(ev_frames.raw)
-        self._metadata["frames"].extend(ev_frames.metadata)
+        self._metadata["intrusion_detection"]["frames"].extend(
+            ev_frames.metadata)
         if thumbnail:
             image.save_image(self.abs_thumbnail_filename, ev_frames.raw[0].image)
         self._front_margin_counter += ev_frames.length
@@ -324,10 +332,8 @@ class IntrusionDetector(object):
                 if self._is_in_roi(unnormalized_bbox):
                     if not bool(in_roi_cands):
                         # This is the first detected object candidate
-                        # TODO: Should figure out whether to use "boxes" or
-                        #       "bboxes"?
-                        in_roi_cands = {"boxes": [], "scores": [], "labels": []}
-                    in_roi_cands["boxes"].append(bboxes[0][j].tolist())
+                        in_roi_cands = {"bboxes": [], "scores": [], "labels": []}
+                    in_roi_cands["bboxes"].append(bboxes[0][j].tolist())
                     in_roi_cands["scores"].append(scores[0][j].tolist())
                     in_roi_cands["labels"].append(label)
             results.append(in_roi_cands)
