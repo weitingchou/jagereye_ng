@@ -150,11 +150,9 @@ function createAnalyzer(req, res, next) {
             if (err.name === 'ValidationError') {
                 return next(createError(400, null, err))
             }
-            if (err.name === 'MongoError') {
-                if (err.code === 11000) {
-                    let dupKey = err.errmsg.slice(err.errmsg.lastIndexOf('dup key:') + 14, -3)
-                    return next(createError(400, `Duplicate key error: ${dupKey}`, err))
-                }
+            if (err.name === 'MongoError' && err.code === 11000) {
+                let dupKey = err.errmsg.slice(err.errmsg.lastIndexOf('dup key:') + 14, -3)
+                return next(createError(400, `Duplicate key error: ${dupKey}`, err))
             }
             return next(createError(500, null, err))
         }
@@ -294,6 +292,13 @@ function updateAnalyzer(req, res, next) {
     }
     models['analyzers'].findByIdAndUpdate(id, update, options, (err, result) => {
         if (err) {
+            if (err.name === 'ValidationError') {
+                return next(createError(400, null, err))
+            }
+            if (err.name === 'MongoError' && err.code === 11000) {
+                let dupKey = err.errmsg.slice(err.errmsg.lastIndexOf('dup key:') + 14, -3)
+                return next(createError(400, `Duplicate key error: ${dupKey}`, err))
+            }
             return next(createError(500, null, err))
         }
         if (result === null) {
@@ -312,7 +317,6 @@ function updateAnalyzer(req, res, next) {
                 closeResponse()
                 return next(createError(500, reply['error']['message']))
             }
-            // TODO: rollback saved record if any error occurred
             closeResponse()
             return res.status(204).send()
         })
