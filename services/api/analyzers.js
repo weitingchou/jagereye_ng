@@ -238,7 +238,7 @@ function getAnalyzer(req, res, next) {
             // TODO: rollback saved record if any error occurred
             closeResponse()
             data.status = reply['result']
-            return res.status(201).send(data)
+            return res.status(200).send(data)
         })
     })
 }
