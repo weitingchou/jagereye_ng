@@ -7,6 +7,7 @@ import time, datetime
 from dask.distributed import LocalCluster, Client
 from multiprocessing import Process, Pipe, TimeoutError
 
+from utils import AsyncTimer
 from intrusion_detection import IntrusionDetector
 
 from jagereye_ng import video_proc as vp
@@ -95,6 +96,7 @@ class Driver(object):
 class Analyzer():
 
     STATUS_CREATED = "created"
+    STATUS_STARTING = "starting"
     STATUS_RUNNING = "running"
     STATUS_SRC_DOWN = "source_down"
     STATUS_STOPPED = "stopped"
@@ -105,8 +107,14 @@ class Analyzer():
         self._name = name
         self._source = source
         self._pipelines = pipelines
-        self._status = Analyzer.STATUS_CREATED
         self._driver = Driver()
+        self._status = Analyzer.STATUS_CREATED
+        self._timer = AsyncTimer(1, self._refresh_driver_status)
+
+    def _check_hot_reconfiguring(self):
+        if (self._status == Analyzer.STATUS_RUNNING or
+                self._status == Analyzer.STATUS_STARTING):
+            raise HotReconfigurationError()
 
     @property
     def name(self):
@@ -114,8 +122,7 @@ class Analyzer():
 
     @name.setter
     def name(self, value):
-        if self._status == Analyzer.STATUS_RUNNING:
-            raise HotReconfigurationError()
+        self._check_hot_reconfiguring()
         self._name = value
 
     @property
@@ -124,8 +131,7 @@ class Analyzer():
 
     @source.setter
     def source(self, value):
-        if self._status == Analyzer.STATUS_RUNNING:
-            raise HotReconfigurationError()
+        self._check_hot_reconfiguring()
         self._source = value
 
     @property
@@ -134,37 +140,56 @@ class Analyzer():
 
     @pipelines.setter
     def pipelines(self, value):
-        if self._status == Analyzer.STATUS_RUNNING:
-            raise HotReconfigurationError()
+        self._check_hot_reconfiguring()
         self._pipelines = value
 
     def get_status(self):
-        if self._driver.poll():
-            status = self._driver.recv()
-            if status == "source_down":
-                self._status = Analyzer.STATUS_SRC_DOWN
-            elif status == "internal_error":
-                self._status = Analyzer.STATUS_STOPPED
         return self._status
 
+    def _refresh_driver_status(self):
+        if self._status == Analyzer.STATUS_STARTING:
+            if self._driver.poll():
+                if self._driver.recv() == "ready":
+                    self._status = Analyzer.STATUS_RUNNING
+                else:
+                    self._status = Analyzer.STATUS_SRC_DOWN
+            elif self._wait_for_driver_countdown > 0:
+                self._wait_for_driver_countdown -= 1
+            else:
+                self._status = Analyzer.STATUS_SRC_DOWN
+        elif self._status == Analyzer.STATUS_RUNNING:
+            if self._driver.poll() and self._driver.recv() == "source_down":
+                self._status = Analyzer.STATUS_SRC_DOWN
+        elif self._status == Analyzer.STATUS_SRC_DOWN:
+            # TODO: Update status to 'running' when connection restored.
+            pass
+
     def start(self):
-        if self._status != Analyzer.STATUS_RUNNING:
+        if (self._status != Analyzer.STATUS_RUNNING and
+                self._status != Analyzer.STATUS_STARTING):
             self._driver.start(analyzer_main_func,
                                self._cluster,
                                self._id,
                                self._name,
                                self._source,
                                self._pipelines)
-            if self._driver.poll(10) and self._driver.recv() == "ready":
-                self._status = Analyzer.STATUS_RUNNING
-            else:
-                self._status = Analyzer.STATUS_SRC_DOWN
+            self._status = Analyzer.STATUS_STARTING
+            self._wait_for_driver_countdown = 10
+            self._timer.start()
+
+    def _cleanup_driver(self):
+        self._driver.send("stop")
+        self._driver.terminate()
 
     def stop(self):
-        if self._status == Analyzer.STATUS_RUNNING:
-            self._driver.send("stop")
-            self._driver.terminate()
+        if (self._status == Analyzer.STATUS_RUNNING or
+                self._status == Analyzer.STATUS_STARTING):
+            self._timer.cancel()
+            self._cleanup_driver()
         self._status = Analyzer.STATUS_STOPPED
+
+    def __repr__(self):
+        return "Analyzer(" + self._id + ")"
 
 
 def analyzer_main_func(signal, cluster, anal_id, name, source, pipelines):
