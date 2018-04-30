@@ -1,9 +1,11 @@
+const { validationResult } = require('express-validator/check')
 const httpError = require('http-errors')
 
-
 function createError(status, message, origErrObj) {
-    let error = new Error()
+    const error = new Error()
+
     error.status = status
+
     if (message) {
         error.message = message
     } else {
@@ -21,4 +23,22 @@ function createError(status, message, origErrObj) {
     return error
 }
 
-module.exports = { createError }
+function validate(req, res, next) {
+    const errors = validationResult(req)
+
+    if (!errors.isEmpty()) {
+        return next(createError(400, errors.array()[0]['msg']))
+    }
+
+    next()
+}
+
+function isValidId(id) {
+    return id.match(/^[0-9a-fA-F]{24}$/)
+}
+
+module.exports = {
+    createError,
+    validate,
+    isValidId,
+}

@@ -1,0 +1,81 @@
+[{
+    "group": "admin",
+    "permissions": [{
+        "resource": "*",
+        "methods": "*",
+        "action": "allow"
+    }]
+}, {
+    "group": "writer",
+    "permissions": [{
+        "resource": "users",
+        "methods": [
+            "GET",
+            "POST"
+        ],
+        "action": "deny"
+    }, {
+        "resource": "user",
+        "methods": [
+            "GET"
+        ],
+        "action": "allow"
+    }, {
+        "resource": "analyzers",
+        "methods": [
+            "GET",
+            "POST",
+            "DELETE"
+        ],
+        "action": "allow"
+    }, {
+        "resource": "analyzer",
+        "methods": [
+            "GET",
+            "POST",
+            "PATCH",
+            "DELETE"
+        ],
+        "action": "allow"
+    }, {
+        "resource": "events",
+        "methods": [
+            "POST"
+        ],
+        "action": "allow"
+    }]
+}, {
+    "group": "reader",
+    "permissions": [{
+        "resource": "users",
+        "methods": [
+            "GET",
+            "POST"
+        ],
+        "action": "deny"
+    }, {
+        "resource": "user",
+        "methods": [
+            "GET"
+        ],
+        "action": "allow"
+    }, {
+        "resource": "analyzers",
+        "methods": [
+            "GET"
+        ],
+        "action": "allow"
+    }, {
+        "resource": "analyzer",
+        "methods": [
+            "GET"
+        ],
+        "action": "allow"
+    }, {
+        "resource": "events",
+        "methods": [
+            "POST"
+        ],
+        "action": "allow"
+    }]
+}]
