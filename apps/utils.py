@@ -14,6 +14,7 @@ class AsyncTimer(object):
         self._func = func
         self._args = args
         self._kwargs = kwargs
+        self._task = None
 
     async def _timer_job(self):
         try:
@@ -25,7 +26,11 @@ class AsyncTimer(object):
             raise
 
     def start(self):
+        assert self._task is None, ("Perhaps you call start() twice"
+                                    " by accident?")
         self._task = asyncio.ensure_future(self._timer_job())
 
     def cancel(self):
-        self._task.cancel()
+        if self._task is not None:
+            self._task.cancel()
+            self._task = None

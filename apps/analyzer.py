@@ -13,7 +13,7 @@ from intrusion_detection import IntrusionDetector
 from jagereye_ng import video_proc as vp
 from jagereye_ng import gpu_worker
 from jagereye_ng.api import APIConnector
-from jagereye_ng.io.streaming import VideoStreamReader, ConnectionBrokenError
+from jagereye_ng.io.streaming import VideoStreamReader, ConnectionError
 from jagereye_ng.io import io_worker, notification, database
 from jagereye_ng import logging
 
@@ -109,7 +109,7 @@ class Analyzer():
         self._pipelines = pipelines
         self._driver = Driver()
         self._status = Analyzer.STATUS_CREATED
-        self._timer = AsyncTimer(1, self._refresh_driver_status)
+        self._status_timer = None
 
     def _check_hot_reconfiguring(self):
         if (self._status == Analyzer.STATUS_RUNNING or
@@ -161,8 +161,22 @@ class Analyzer():
             if self._driver.poll() and self._driver.recv() == "source_down":
                 self._status = Analyzer.STATUS_SRC_DOWN
         elif self._status == Analyzer.STATUS_SRC_DOWN:
-            # TODO: Update status to 'running' when connection restored.
-            pass
+            # Try to restart the driver process
+            self.start()
+
+    def _setup_timer(self):
+        if self._status_timer is None:
+            self._status_timer = AsyncTimer(1, self._refresh_driver_status)
+            self._status_timer.start()
+
+    def _cleanup_timer(self):
+        if self._status_timer is not None:
+            self._status_timer.cancel()
+            self._status_timer = None
+
+    def _cleanup_driver(self):
+        self._driver.send("stop")
+        self._driver.terminate()
 
     def start(self):
         if (self._status != Analyzer.STATUS_RUNNING and
@@ -174,17 +188,13 @@ class Analyzer():
                                self._source,
                                self._pipelines)
             self._status = Analyzer.STATUS_STARTING
-            self._wait_for_driver_countdown = 10
-            self._timer.start()
-
-    def _cleanup_driver(self):
-        self._driver.send("stop")
-        self._driver.terminate()
+            self._wait_for_driver_countdown = 20
+            self._setup_timer()
 
     def stop(self):
         if (self._status == Analyzer.STATUS_RUNNING or
                 self._status == Analyzer.STATUS_STARTING):
-            self._timer.cancel()
+            self._cleanup_timer()
             self._cleanup_driver()
         self._status = Analyzer.STATUS_STOPPED
 
@@ -195,14 +205,19 @@ class Analyzer():
 def analyzer_main_func(signal, cluster, anal_id, name, source, pipelines):
     logging.info("Starts running Analyzer: {}".format(name))
 
+    src_reader = VideoStreamReader()
+    try:
+        src_reader.open(source["url"])
+    except ConnectionError:
+        signal.send("source_down")
+        raise
+    else:
+        video_info = src_reader.get_video_info()
+
     try:
         # TODO: Get the address of scheduler from the configuration
         #       file.
         dask = Client(cluster.scheduler_address)
-
-        src_reader = VideoStreamReader()
-        src_reader.open(source["url"])
-        video_info = src_reader.get_video_info()
 
         pipelines = create_pipeline(
             anal_id,
@@ -233,7 +248,7 @@ def analyzer_main_func(signal, cluster, anal_id, name, source, pipelines):
 
             if signal.poll() and signal.recv() == "stop":
                 break
-    except ConnectionBrokenError:
+    except ConnectionError:
         logging.error("Error occurred when trying to connect to source {}"
                       .format(source["url"]))
         # TODO: Should push a notification of this error
@@ -265,7 +280,7 @@ class AnalyzerManager(APIConnector):
                 self._cluster, sid, name, source, pipelines)
         except KeyError as e:
             raise RuntimeError("Invalid request format: {}".format(e.args[0]))
-        except ConnectionBrokenError:
+        except ConnectionError:
             raise RuntimeError("Failed to establish connection to {}"
                                .format(source["url"]))
         except Exception as e:

@@ -4,18 +4,29 @@ from __future__ import print_function
 
 import time
 import threading
+import signal
+import cv2
 from queue import Queue
 from collections import deque
 from urllib.parse import urlparse
-
-import cv2
-import numpy as np
 
 from jagereye_ng.util import logging
 
 
 DEFAULT_STREAM_BUFFER_SIZE = 64     # frames
 DEFAULT_FPS = 15
+
+
+class ConnectionError(Exception):
+    pass
+
+
+class EndOfVideoError(Exception):
+    pass
+
+
+class TaskTimeoutError(Exception):
+    pass
 
 
 def _is_livestream(url):
@@ -33,12 +44,52 @@ def _is_livestream(url):
     return urlparse(url).scheme.lower() == "rtsp"
 
 
-class ConnectionBrokenError(Exception):
-    pass
+def run_with_timeout(timeout, func, *args, **kwargs):
+    """Execute a task with a timeout.
 
+    Args:
+        timeout (float): The timeout value.
+        func (function): The task function to be executed.
 
-class EndOfVideoError(Exception):
-    pass
+    Returns:
+        The task result.
+
+    Raises:
+        An TaskTimeoutError exception if the execution of the task exceeded
+        the timeout, otherwise, raises the task exceptions, if any.
+    """
+
+    class Job(threading.Thread):
+        def __init__(self, func, *args, **kwargs):
+            threading.Thread.__init__(self)
+            self.daemon = True
+            self._func = func
+            self._args = args
+            self._kwargs = kwargs
+            self.result = None
+            self.exception = None
+
+        def run(self):
+            try:
+                self.result = self._func(*self._args, **self._kwargs)
+            except Exception as e:
+                self.exception = e
+
+        def terminate(self):
+            signal.pthread_kill(self.ident, 0)
+
+    job = Job(func, *args, **kwargs)
+    job.start()
+    job.join(timeout=timeout)
+
+    if job.is_alive():
+        # job's timeout has happened, cancel it and notify the caller
+        job.terminate()
+        raise TaskTimeoutError("The task has exceeded the timeout.")
+    elif job.exception is not None:
+        raise job.exception
+    else:
+        return job.result
 
 
 class VideoFrame(object):
@@ -71,7 +122,7 @@ class StreamReaderThread(threading.Thread):
                 success, image = self._reader.read()
                 if not success:
                     if self._is_livestream:
-                        raise ConnectionBrokenError()
+                        raise ConnectionError()
                     else:
                         raise EndOfVideoError()
                 timestamp = time.time()
@@ -115,28 +166,33 @@ class VideoStreamReader(object):
         self._stop_event = threading.Event()
         self._video_info = {}
 
-    def open(self, src, fps=DEFAULT_FPS, only_validate=False):
+    def open(self, src, timeout=15, fps=DEFAULT_FPS):
         logging.info("Opening video source: {}".format(src))
-        if self._reader.isOpened():
-            logging.error("Source is already opened")
-            raise RuntimeError("Stream is already opened")
 
-        error_message = "Can't open video stream {}".format(src)
-        if not self._reader.open(src):
-            raise ConnectionBrokenError(error_message)
+        assert not self._reader.isOpened(), ("Perhaps you call open() twice"
+                                             " by accident?")
 
-        if only_validate:
-            return
+        error_message = "Can't open video source from {}".format(src)
 
+        # Open video source
+        try:
+            if not run_with_timeout(timeout, self._reader.open, src):
+                raise ConnectionError(error_message)
+        except TaskTimeoutError:
+            logging.error("Timeout error occurred when opening video source"
+                          " from {}".format(src))
+            raise ConnectionError(error_message)
+
+        # Get video information
         success, image = self._reader.read()
         if not success:
-            raise ConnectionBrokenError(error_message)
+            raise ConnectionError(error_message)
         height, width, _ = image.shape
         self._video_info["frame_size"] = (width, height)
 
+        # Start reader thread
         self._stop_event.clear()
         capture_interval = 1000.0 / fps
-
         logging.info("Starting reader thread")
         self._thread = StreamReaderThread(self._reader,
                                           self._queue,
@@ -170,7 +226,7 @@ class VideoStreamReader(object):
             is determined by the `batch_size`.
 
         Raises:
-            ConnectionBrokenError: Raise if the livestream connection is
+            ConnectionError: Raise if the livestream connection is
                 disconnected.
             EndOfVideoError: Raise if the file stream reaches the end.
         """
@@ -189,8 +245,8 @@ class VideoStreamReader(object):
                 data = self._read_all()
             else:
                 data = self._read(batch_size)
-        elif isinstance(exception, ConnectionBrokenError):
-            raise ConnectionBrokenError()
+        elif isinstance(exception, ConnectionError):
+            raise ConnectionError()
         else:
             # XXX: In this case we are assuming that everything is fine,
             #      and current queue size should greater than the batch
