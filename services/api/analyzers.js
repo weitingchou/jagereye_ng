@@ -2,6 +2,7 @@ const express = require('express')
 const { body, validationResult } = require('express-validator/check')
 const models = require('./database')
 const { createError } = require('./utils')
+const { routesWithAuth } = require('./auth')
 const NATS = require('nats')
 const fs = require('fs')
 const router = express.Router()
@@ -406,18 +407,25 @@ function getAnalyzerPipeline(req, res, next) {
 /*
  * Routing Table
  */
-router.get('/analyzers', getAnalyzers)
-router.post('/analyzers', postReqValidator,  createAnalyzer)
-router.delete('/analyzers', deleteAnalyzers)
-
-router.get('/analyzers/settings', getSettings)
-
-router.get('/analyzer/:id', getAnalyzer)
-router.patch('/analyzer/:id', updateAnalyzer)
-router.delete('/analyzer/:id', deleteAnalyzer)
-router.get('/analyzer/:id/source', getAnalyzerSource)
-router.get('/analyzer/:id/pipelines', getAnalyzerPipeline)
-router.post('/analyzer/:id/start', startAnalyzer)
-router.post('/analyzer/:id/stop', stopAnalyzer)
+routesWithAuth(
+    router,
+    ['get', '/analyzers', getAnalyzers],
+    ['post', '/analyzers', postReqValidator, createAnalyzer],
+    ['delete', '/analyzers', deleteAnalyzers],
+)
+routesWithAuth(
+    router,
+    ['get', '/analyzers/settings', getSettings],
+)
+routesWithAuth(
+    router,
+    ['get', '/analyzer/:id', getAnalyzer],
+    ['patch', '/analyzer/:id', updateAnalyzer],
+    ['delete', '/analyzer/:id', deleteAnalyzer],
+    ['get', '/analyzer/:id/source', getAnalyzerSource],
+    ['get', '/analyzer/:id/pipelines', getAnalyzerPipeline],
+    ['post', '/analyzer/:id/start', startAnalyzer],
+    ['post', '/analyzer/:id/stop', stopAnalyzer],
+)
 
 module.exports = router

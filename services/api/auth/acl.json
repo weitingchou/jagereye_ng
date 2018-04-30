@@ -8,14 +8,7 @@
 }, {
     "group": "writer",
     "permissions": [{
-        "resource": "users",
-        "methods": [
-            "GET",
-            "POST"
-        ],
-        "action": "deny"
-    }, {
-        "resource": "user",
+        "resource": "user/:id",
         "methods": [
             "GET"
         ],
@@ -29,12 +22,41 @@
         ],
         "action": "allow"
     }, {
-        "resource": "analyzer",
+        "resource": "analyzers/settings",
+        "methods": [
+            "GET"
+        ],
+        "action": "allow"
+    }, {
+        "resource": "analyzer/:id",
         "methods": [
             "GET",
-            "POST",
             "PATCH",
             "DELETE"
+        ],
+        "action": "allow"
+    }, {
+        "resource": "analyzer/:id/source",
+        "methods": [
+            "GET"
+        ],
+        "action": "allow"
+    }, {
+        "resource": "analyzer/:id/pipelines",
+        "methods": [
+            "GET"
+        ],
+        "action": "allow"
+    }, {
+        "resource": "analyzer/:id/start",
+        "methods": [
+            "POST"
+        ],
+        "action": "allow"
+    }, {
+        "resource": "analyzer/:id/stop",
+        "methods": [
+            "POST"
         ],
         "action": "allow"
     }, {
@@ -47,14 +69,7 @@
 }, {
     "group": "reader",
     "permissions": [{
-        "resource": "users",
-        "methods": [
-            "GET",
-            "POST"
-        ],
-        "action": "deny"
-    }, {
-        "resource": "user",
+        "resource": "user/:id",
         "methods": [
             "GET"
         ],
@@ -66,7 +81,25 @@
         ],
         "action": "allow"
     }, {
-        "resource": "analyzer",
+        "resource": "analyzers/settings",
+        "methods": [
+            "GET"
+        ],
+        "action": "allow"
+    }, {
+        "resource": "analyzer/:id",
+        "methods": [
+            "GET"
+        ],
+        "action": "allow"
+    }, {
+        "resource": "analyzer/:id/source",
+        "methods": [
+            "GET"
+        ],
+        "action": "allow"
+    }, {
+        "resource": "analyzer/:id/pipelines",
         "methods": [
             "GET"
         ],

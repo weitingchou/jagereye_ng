@@ -3,6 +3,8 @@ const router = express.Router()
 //const { body, validationResult } = require('express-validator/check')
 const { createError } = require('./utils')
 
+const { routesWithAuth } = require('./auth')
+
 const mongoose = require('mongoose')
 const Schema = mongoose.Schema
 const conn = mongoose.createConnection('mongodb://localhost:27017/jager_test')
@@ -57,6 +59,9 @@ function searchEvents(req, res, next) {
 /*
  * Routing Table
  */
-router.post('/events', searchEvents)
+routesWithAuth(
+    router,
+    ['post', '/events', searchEvents],
+)
 
 module.exports = router
