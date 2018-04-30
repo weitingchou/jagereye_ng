@@ -39,6 +39,13 @@ const createUserValidator = checkSchema({
     }
 })
 
+const changePasswordValidator = checkSchema({
+    password: {
+        exists: true,
+        errorMessage: 'Password is required',
+    },
+})
+
 async function getAllUsers(req, res, next) {
     try {
         const list = await models.users.find({}, getUserProjection)
@@ -93,6 +100,38 @@ async function getUser(req, res, next) {
         }
 
         res.send(result)
+    } catch (err) {
+        return next(createError(500, null, err))
+    }
+}
+
+async function changePassword(req, res, next) {
+    const { id: targetId } = req.params
+    const { _id: requesterId, role: requesterRole } = req.user
+
+    if (!isValidId(targetId)) {
+        return next(createError(400, 'Unvalid ID'))
+    }
+
+    if (requesterRole !== ROLES.ADMIN && requesterId.toString() !== targetId) {
+        return next(createError(400, 'Request non-self user'))
+    }
+
+    try {
+        const updated = {
+            password: req.body.password,
+        }
+        const options = {
+            new: true,
+            runValidators: true,
+        }
+        const result = await models.users.findByIdAndUpdate(targetId, updated, options)
+
+        if (!result) {
+            return next(createError(404, 'User not existed'))
+        }
+
+        return res.status(204).send()
     } catch (err) {
         return next(createError(500, null, err))
     }
@@ -155,6 +194,7 @@ routesWithAuth(
 routesWithAuth(
     router,
     ['get', '/user/:id', getUser],
+    ['patch', '/user/:id/password', changePasswordValidator, validate, changePassword],
 )
 router.post('/login', userValidator, validate, login)
 
