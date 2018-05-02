@@ -10,7 +10,8 @@
     "permissions": [{
         "resource": "user/:id",
         "methods": [
-            "GET"
+            "GET",
+            "DELETE"
         ],
         "action": "allow"
     }, {
@@ -77,7 +78,8 @@
     "permissions": [{
         "resource": "user/:id",
         "methods": [
-            "GET"
+            "GET",
+            "DELETE"
         ],
         "action": "allow"
     }, {
