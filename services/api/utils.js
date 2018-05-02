@@ -34,6 +34,10 @@ function validate(req, res, next) {
 }
 
 function isValidId(id) {
+    // The length of ID must be 24 and the characters must be numbers, "a" to
+    // "f", or "A" to "F".
+    // Valid examples: "5ae68a54b6e9db31bd1e0a2c", "6acf3cf4e138230eb11a3db9".
+    // Invalid examples: "6acf3cf4e138230e", "4be68a54b6e9db31bd1e0aZX".
     return id.match(/^[0-9a-fA-F]{24}$/)
 }
 
