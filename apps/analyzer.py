@@ -21,7 +21,7 @@ from jagereye_ng.io import io_worker, notification, database
 from jagereye_ng import logging
 
 # TODO: this must be configuration in the future
-MONGODB_URL = 'mongodb://localhost:27017/'
+MONGODB_URL = 'mongodb://localhost:27019/'
 MONGODB_NAME = 'jager_test'
 
 
@@ -386,9 +386,9 @@ class AnalyzerManager(APIConnector):
                     # start self._analyzers
                     self._analyzers[sid].start()
                 except KeyError:
-                    raise RuntimeError("Analyzer not found")
-        except ServerSelectionTimeoutError:
-            raise RuntimeError("Mongodb connect failed")
+                    raise
+        except ServerSelectionTimeoutError as err:
+            raise RuntimeError("Mongodb connect failed", err)
 
 
 
