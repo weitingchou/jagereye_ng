@@ -106,6 +106,42 @@ async function getUser(req, res, next) {
     }
 }
 
+async function deleteUser(req, res, next) {
+    const { id: targetId } = req.params
+    const { _id: requesterId, role: requesterRole } = req.user
+
+    if (!isValidId(targetId)) {
+        return next(createError(400, 'Unvalid ID'))
+    }
+
+    if (requesterRole !== ROLES.ADMIN && requesterId.toString() !== targetId) {
+        return next(createError(400, 'Request non-self user'))
+    }
+
+    try {
+        const targetUser = await models.users.findById(targetId)
+
+        if (!targetUser) {
+            return next(createError(404, 'User not existed'))
+        }
+
+        if (targetUser.role === ROLES.ADMIN) {
+            // Deletion of admin user is not allowed.
+            return next(createError(400, 'Deletion of admin user is not allowed'))
+        }
+
+        const result = await models.users.findByIdAndRemove(targetId)
+
+        if (!result) {
+            return next(createError(404, 'User not existed'))
+        }
+
+        return res.status(204).send()
+    } catch (err) {
+        return next(createError(500, null, err))
+    }
+}
+
 async function changePassword(req, res, next) {
     const { id: targetId } = req.params
     const { _id: requesterId, role: requesterRole } = req.user
@@ -196,6 +232,7 @@ routesWithAuth(
 routesWithAuth(
     router,
     ['get', '/user/:id', getUser],
+    ['delete', '/user/:id', deleteUser],
     ['patch', '/user/:id/password', changePasswordValidator, validate, changePassword],
 )
 router.post('/login', userValidator, validate, login)
