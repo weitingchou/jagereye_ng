@@ -15,6 +15,7 @@ const getUserProjection = {
     '_id': 1,
     'username': 1,
     'role': 1,
+    'passwordLastUpdated': 1,
 }
 
 const router = express.Router()
@@ -120,6 +121,7 @@ async function changePassword(req, res, next) {
     try {
         const updated = {
             password: req.body.password,
+            passwordLastUpdated: new Date(),
         }
         const options = {
             new: true,
@@ -138,7 +140,7 @@ async function changePassword(req, res, next) {
 }
 
 async function login(req, res, next) {
-    const { username, password, role } = req.body
+    const { username, password } = req.body
 
     try {
         const result = await models.users.findOne({
