@@ -5,6 +5,12 @@ services:
         network_mode: host
         ports:
             client: "5000"
+        base_url: "api/v1"
+        admin:
+            username: "admin"
+            default_password: "admin"
+        token:
+            secret: "jagereye_dev"
     database:
         version: "mongo-3.6.0"
         db_name: jagereye-dev

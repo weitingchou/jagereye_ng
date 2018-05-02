@@ -17,12 +17,17 @@
         "body-parser": "1.18.2",
         "cors": "2.8.4",
         "express": "4.16.1",
-        "express-validator": "4.3.0",
+        "express-acl": "^2.0.0",
+        "express-validator": "5.0.3",
         "fluent-ffmpeg": "2.1.2",
         "http-errors": "1.6.2",
+        "js-yaml": "^3.11.0",
+        "jsonwebtoken": "^8.2.1",
         "mongoose": "4.13.6",
         "nats": "0.7.24",
         "npm": "^5.8.0",
+        "passport": "^0.4.0",
+        "passport-jwt": "^4.0.0",
         "ws": "3.3.2"
     }
 }
