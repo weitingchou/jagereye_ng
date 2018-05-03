@@ -5,12 +5,14 @@ from __future__ import print_function
 import cv2
 import numpy as np
 
+from jagereye_ng.io import obj_storage
 
-def save_image(filename, image, max_width=0):
+
+def save_image(key, image, max_width=0):
     """Save image.
 
     Args:
-        filename: The filename of the image to be saved.
+        key: The key of the image to be saved in object storage.
         image: A 3 dimensional numpy array of the image to be saved.
         max_width (int): The maximum width of image. If the given image
             width is larger than max_width, the width of image file will be
@@ -22,7 +24,8 @@ def save_image(filename, image, max_width=0):
     if max_width > 0 and orig_width > max_width:
         ratio = max_width / orig_width
         image = cv2.resize(image, (0, 0), fx=ratio, fy=ratio)
-    cv2.imwrite(filename, image)
+
+    obj_storage.save_image_obj(key, image)
 
 
 def draw_region(image, region, color, alpha=0.5):
