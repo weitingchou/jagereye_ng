@@ -38,11 +38,9 @@ function searchEvents(req, res, next) {
         if (body['events']['gt']) {
             eventIdQuery.$gt = ObjectId(body['events']['gt'])
         }
-
         if (body['events']['lt']) {
             eventIdQuery.$lt = ObjectId(body['events']['lt'])
         }
-
         query['_id'] = eventIdQuery
     }
 
