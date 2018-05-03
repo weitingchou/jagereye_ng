@@ -8,11 +8,10 @@ import numpy as np
 from jagereye_ng.io import obj_storage
 
 
-def save_image(key, image, max_width=0):
-    """Save image.
+def shrink_image(image, max_width=0):
+    """Shrink image to a smaller size.
 
     Args:
-        key: The key of the image to be saved in object storage.
         image: A 3 dimensional numpy array of the image to be saved.
         max_width (int): The maximum width of image. If the given image
             width is larger than max_width, the width of image file will be
@@ -23,9 +22,11 @@ def save_image(key, image, max_width=0):
     orig_width = image.shape[1]
     if max_width > 0 and orig_width > max_width:
         ratio = max_width / orig_width
-        image = cv2.resize(image, (0, 0), fx=ratio, fy=ratio)
+        shrunk_image = cv2.resize(image, (0, 0), fx=ratio, fy=ratio)
+    else:
+        shrunk_image = image.copy()
 
-    obj_storage.save_image_obj(key, image)
+    return shrunk_image
 
 
 def draw_region(image, region, color, alpha=0.5):

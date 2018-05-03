@@ -151,7 +151,8 @@ class EventVideoWriter(object):
                                          self._roi,
                                          EventVideoWriter.EVENT_ALERT_COLOR,
                                          0.4)
-            im.save_image(self.thumbnail_key, drawn_image)
+            shrunk_image = im.shrink_image(drawn_image)
+            obj_storage.save_image_obj(self.thumbnail_key, shrunk_image)
             logging.info("Saved thumbnail {}".format(self.thumbnail_key))
         self._front_margin_counter += ev_frames.length
         if self._front_margin_counter >= self._max_margin:
