@@ -6,6 +6,7 @@ const { createError } = require('./utils')
 const { routesWithAuth } = require('./auth')
 
 const mongoose = require('mongoose')
+const ObjectId = mongoose.Types.ObjectId;
 const Schema = mongoose.Schema
 const conn = mongoose.createConnection('mongodb://localhost:27017/jager_test')
 
@@ -16,22 +17,34 @@ const eventSchema = Schema({
     date: Date,
     type: String
 }, { collection: 'events' })
-const eventModel = conn.model('events', eventSchema)
 
+const eventModel = conn.model('events', eventSchema)
 
 function searchEvents(req, res, next) {
     let query = {}
     let body = req.body
 
     // TODO(Ray): there will be a validator being reponsible for it
-    if (!body['timestamp']['start'] || !body['timestamp']['end']) {
-        return next(createError(400, 'Should specify a time range for querying.'))
+    if(body['timestamp']) {
+        if ((typeof body['timestamp']['start'] !== 'number') ||
+            (typeof body['timestamp']['end'] !== 'number')) {
+            return next(createError(400, "Invalid timestamp format, should be number"))
+        }
+        query['timestamp'] = {$gte: body['timestamp']['start'], $lt: body['timestamp']['end']}
     }
-    if ((typeof body['timestamp']['start'] !== 'number') ||
-        (typeof body['timestamp']['end'] !== 'number')) {
-        return next(createError(400, "Invalid timestamp format, should be number"))
+
+    if(body['events']) {
+        let eventIdQuery = {}
+        if (body['events']['gt']) {
+            eventIdQuery.$gt = ObjectId(body['events']['gt'])
+        }
+
+        if (body['events']['lt']) {
+            eventIdQuery.$lt = ObjectId(body['events']['lt'])
+        }
+
+        query['_id'] = eventIdQuery
     }
-    query['timestamp'] = {$gte: body['timestamp']['start'], $lt: body['timestamp']['end']}
 
     if (body['analyzers']) {
         // TODO(Ray): there will be a validator being reponsible for it
