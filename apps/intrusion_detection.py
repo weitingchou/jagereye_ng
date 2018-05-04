@@ -12,7 +12,7 @@ from shapely import geometry
 
 from jagereye_ng import image as im
 from jagereye_ng import gpu_worker
-from jagereye_ng.io import obj_storage
+from jagereye_ng.io.obj_storage import ObjectStorageClient
 from jagereye_ng.io.streaming import VideoStreamWriter
 from jagereye_ng import logging
 
@@ -104,6 +104,7 @@ class EventVideoWriter(object):
         self._roi = roi
         self._max_margin = max_margin
         self._writer = VideoStreamWriter()
+        self._obj_stg_cli = ObjectStorageClient()
 
         self.video_key = os.path.join(obj_key_prefix, "{}.{}".format(obj_name, video_format))
         self.metadata_key = os.path.join(obj_key_prefix, "{}.json".format(obj_name))
@@ -120,6 +121,9 @@ class EventVideoWriter(object):
             self._writer.open(self._tmp_video_path, fps, size)
         except RuntimeError:
             raise
+
+        # Connect to the object storage.
+        self._obj_stg_cli.connect()
 
         self._front_margin_counter = 0
         self._metadata = {
@@ -152,7 +156,7 @@ class EventVideoWriter(object):
                                          EventVideoWriter.EVENT_ALERT_COLOR,
                                          0.4)
             shrunk_image = im.shrink_image(drawn_image)
-            obj_storage.save_image_obj(self.thumbnail_key, shrunk_image)
+            self._obj_stg_cli.save_image_obj(self.thumbnail_key, shrunk_image)
             logging.info("Saved thumbnail {}".format(self.thumbnail_key))
         self._front_margin_counter += ev_frames.length
         if self._front_margin_counter >= self._max_margin:
@@ -164,12 +168,12 @@ class EventVideoWriter(object):
         self._writer.end()
 
         # Write out video to object storage.
-        obj_storage.save_file_obj(self.video_key, self._tmp_video_path)
+        self._obj_stg_cli.save_file_obj(self.video_key, self._tmp_video_path)
         os.remove(self._tmp_video_path)
         logging.info("Saved video {}".format(self.video_key))
 
         # Write out video metadata to object storage.
-        obj_storage.save_json_obj(self.metadata_key, self._metadata)
+        self._obj_stg_cli.save_json_obj(self.metadata_key, self._metadata)
         logging.info("Saved metadata {}".format(self.metadata_key))
 
 
