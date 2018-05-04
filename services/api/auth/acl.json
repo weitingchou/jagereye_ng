@@ -1,0 +1,128 @@
+[{
+    "group": "admin",
+    "permissions": [{
+        "resource": "*",
+        "methods": "*",
+        "action": "allow"
+    }]
+}, {
+    "group": "writer",
+    "permissions": [{
+        "resource": "user/:id",
+        "methods": [
+            "GET",
+            "DELETE"
+        ],
+        "action": "allow"
+    }, {
+        "resource": "user/:id/password",
+        "methods": [
+            "PATCH"
+        ],
+        "action": "allow"
+    }, {
+        "resource": "analyzers",
+        "methods": [
+            "GET",
+            "POST",
+            "DELETE"
+        ],
+        "action": "allow"
+    }, {
+        "resource": "analyzers/settings",
+        "methods": [
+            "GET"
+        ],
+        "action": "allow"
+    }, {
+        "resource": "analyzer/:id",
+        "methods": [
+            "GET",
+            "PATCH",
+            "DELETE"
+        ],
+        "action": "allow"
+    }, {
+        "resource": "analyzer/:id/source",
+        "methods": [
+            "GET"
+        ],
+        "action": "allow"
+    }, {
+        "resource": "analyzer/:id/pipelines",
+        "methods": [
+            "GET"
+        ],
+        "action": "allow"
+    }, {
+        "resource": "analyzer/:id/start",
+        "methods": [
+            "POST"
+        ],
+        "action": "allow"
+    }, {
+        "resource": "analyzer/:id/stop",
+        "methods": [
+            "POST"
+        ],
+        "action": "allow"
+    }, {
+        "resource": "events",
+        "methods": [
+            "POST"
+        ],
+        "action": "allow"
+    }]
+}, {
+    "group": "reader",
+    "permissions": [{
+        "resource": "user/:id",
+        "methods": [
+            "GET",
+            "DELETE"
+        ],
+        "action": "allow"
+    }, {
+        "resource": "user/:id/password",
+        "methods": [
+            "PATCH"
+        ],
+        "action": "allow"
+    }, {
+        "resource": "analyzers",
+        "methods": [
+            "GET"
+        ],
+        "action": "allow"
+    }, {
+        "resource": "analyzers/settings",
+        "methods": [
+            "GET"
+        ],
+        "action": "allow"
+    }, {
+        "resource": "analyzer/:id",
+        "methods": [
+            "GET"
+        ],
+        "action": "allow"
+    }, {
+        "resource": "analyzer/:id/source",
+        "methods": [
+            "GET"
+        ],
+        "action": "allow"
+    }, {
+        "resource": "analyzer/:id/pipelines",
+        "methods": [
+            "GET"
+        ],
+        "action": "allow"
+    }, {
+        "resource": "events",
+        "methods": [
+            "POST"
+        ],
+        "action": "allow"
+    }]
+}]

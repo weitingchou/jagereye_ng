@@ -23,6 +23,25 @@
             "required": true
         }
     },
+    "users": {
+        "username": {
+            "type": "String",
+            "required": true,
+            "unique": true
+        },
+        "password": {
+            "type": "String",
+            "required": true
+        },
+        "role": {
+            "type": "String",
+            "required": true,
+            "enum": [ "admin", "writer", "reader" ]
+        },
+        "passwordLastUpdated": {
+            "type": "Date"
+        }
+    },
     "analyzers": {
         "name": {
             "type": "String",
