@@ -4,7 +4,6 @@ from __future__ import print_function
 
 import os
 import time
-import cv2
 import json
 from collections import deque
 from dask.distributed import get_client
@@ -80,11 +79,13 @@ class EventVideoFrames(object):
                 matched = catched[motion["index"].index(i)].copy()
             except ValueError:
                 # TODO: For non-catched case should insert None
-                metadata.append({"bboxes": [], "scores": [], "labels": [], "mode": mode})
+                metadata.append({"bboxes": [], "scores": [], "labels": [],
+                                 "mode": mode})
             else:
                 matched.update({"mode": mode})
                 metadata.append(matched)
         return metadata
+
 
 class EventVideoWriter(object):
 
@@ -218,6 +219,34 @@ class EventVideoAgent(object):
         self.clear_back_margin_queue()
 
 
+def transform_roi_format(roi, frame_size):
+    """Transforms roi format.
+
+    Transforms roi format:
+        1) from list of object to list of tuple
+        2) from relative point value to absolute point value,
+           absolution point value = relative point value *
+                                    corresponding frame size
+
+    Args:
+        roi (list of objects): Target roi to be transformed.
+        frame_size (tuple): The frame size of input image frames with
+            format (width, height).
+
+    Returns:
+        Transformed roi.
+    """
+    result = []
+    for r in roi:
+        if ((r["x"] < 0 or r["x"] > 1) or
+                (r["y"] < 0 or r["y"] > 1)):
+            raise ValueError("Invalid roi point format, should be a float "
+                             "with value between 0 and 1.")
+        result.append((float(r["x"]) * float(frame_size[0]),
+                       float(r["y"]) * float(frame_size[1])))
+    return tuple(result)
+
+
 class IntrusionDetector(object):
 
     STATE_NORMAL = 0
@@ -233,13 +262,14 @@ class IntrusionDetector(object):
         """ Create a new IntrusionDetector instance.
 
         Args:
-            anal_id (string): The ID of the analyzer that this detector attached
-                for.
+            anal_id (string): The ID of the analyzer that this detector
+                attached for.
             roi (list of object): The region of interest with format of a list
-                point objects, such as [{"x": 1, "y":1}, {"x": 2, "y": 2}, ...]
+                point objects, such as [{"x": 0.23, "y": 0.11},
+                {"x": 0.71, "y": 0.39}, ...]
             triggers (list of string): The target of interest.
-            frame_size (tuple): The frame size of input image frames with format
-                (width, height).
+            frame_size (tuple): The frame size of input image frames with
+                format (width, height).
             detect_threshold (number): The threshold of the detected object
                 score.
 
@@ -251,10 +281,10 @@ class IntrusionDetector(object):
             raise RuntimeError("Should connect to Dask scheduler before"
                                " initializing this object")
 
-        self._roi = tuple([(r["x"], r["y"]) for r in roi])
+        self._roi = transform_roi_format(roi, frame_size)
+        self._frame_size = frame_size
         self._roi_polygon = geometry.Polygon(self._roi)
         self._triggers = triggers
-        self._frame_size = frame_size
         self._detect_threshold = detect_threshold
         self._category_index = load_category_index("./coco.labels")
         self._state = IntrusionDetector.STATE_NORMAL
