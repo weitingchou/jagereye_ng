@@ -11,6 +11,7 @@ from shapely import geometry
 
 from jagereye_ng import image as im
 from jagereye_ng import gpu_worker
+from jagereye_ng.io.obj_storage import ObjectStorageClient
 from jagereye_ng.io.streaming import VideoStreamWriter
 from jagereye_ng import logging
 
@@ -93,9 +94,8 @@ class EventVideoWriter(object):
     EVENT_ALERT_COLOR = (34, 87, 255)
 
     def __init__(self,
-                 filename,
-                 rel_out_dir,
-                 abs_out_dir,
+                 obj_name,
+                 obj_key_prefix,
                  video_format,
                  roi,
                  fps,
@@ -105,19 +105,26 @@ class EventVideoWriter(object):
         self._roi = roi
         self._max_margin = max_margin
         self._writer = VideoStreamWriter()
+        self._obj_stg_cli = ObjectStorageClient()
 
-        self.rel_video_filename = os.path.join(rel_out_dir, "{}.{}".format(filename, video_format))
-        self.rel_metadata_filename = os.path.join(rel_out_dir, "{}.json".format(filename))
-        self.rel_thumbnail_filename = os.path.join(rel_out_dir, "{}.jpg".format(filename))
+        self.video_key = os.path.join(obj_key_prefix, "{}.{}".format(obj_name, video_format))
+        self.metadata_key = os.path.join(obj_key_prefix, "{}.json".format(obj_name))
+        self.thumbnail_key = os.path.join(obj_key_prefix, "{}.jpg".format(obj_name))
 
-        self.abs_video_filename = os.path.join(abs_out_dir, "{}.{}".format(filename, video_format))
-        self.abs_metadata_filename = os.path.join(abs_out_dir, "{}.json".format(filename))
-        self.abs_thumbnail_filename = os.path.join(abs_out_dir, "{}.jpg".format(filename))
+        self._tmp_video_path = os.path.join('/tmp', self.video_key)
+
+        # Create the temporary folder for video if it does not exist.
+        tmp_video_dir = os.path.dirname(self._tmp_video_path)
+        if not os.path.exists(tmp_video_dir):
+            os.makedirs(tmp_video_dir)
 
         try:
-            self._writer.open(self.abs_video_filename, fps, size)
+            self._writer.open(self._tmp_video_path, fps, size)
         except RuntimeError:
             raise
+
+        # Connect to the object storage.
+        self._obj_stg_cli.connect()
 
         self._front_margin_counter = 0
         self._metadata = {
@@ -149,7 +156,9 @@ class EventVideoWriter(object):
                                          self._roi,
                                          EventVideoWriter.EVENT_ALERT_COLOR,
                                          0.4)
-            im.save_image(self.abs_thumbnail_filename, drawn_image)
+            shrunk_image = im.shrink_image(drawn_image)
+            self._obj_stg_cli.save_image_obj(self.thumbnail_key, shrunk_image)
+            logging.info("Saved thumbnail {}".format(self.thumbnail_key))
         self._front_margin_counter += ev_frames.length
         if self._front_margin_counter >= self._max_margin:
             self._metadata["end"] = float(ev_frames.raw[-1].timestamp)
@@ -158,24 +167,26 @@ class EventVideoWriter(object):
 
     def end(self):
         self._writer.end()
-        # Write out video metadata file
-        with open(self.abs_metadata_filename, "w") as f:
-            json.dump(self._metadata, f)
-            logging.info("Saved metadata file {}".format(
-                self.abs_metadata_filename))
+
+        # Write out video to object storage.
+        self._obj_stg_cli.save_file_obj(self.video_key, self._tmp_video_path)
+        os.remove(self._tmp_video_path)
+        logging.info("Saved video {}".format(self.video_key))
+
+        # Write out video metadata to object storage.
+        self._obj_stg_cli.save_json_obj(self.metadata_key, self._metadata)
+        logging.info("Saved metadata {}".format(self.metadata_key))
 
 
 class EventVideoAgent(object):
     def __init__(self,
-                 rel_out_dir,
-                 abs_out_dir,
+                 obj_key_prefix,
                  frame_size,
                  roi,
                  video_format,
                  fps,
                  margin):
-        self._rel_out_dir = rel_out_dir
-        self._abs_out_dir = abs_out_dir
+        self._obj_key_prefix = obj_key_prefix
         self._frame_size = frame_size
         self._roi = roi
         self._video_format = video_format
@@ -184,19 +195,14 @@ class EventVideoAgent(object):
         self._max_margin_in_frames = self._fps * margin
         self._back_margin_q = deque(maxlen=self._max_margin_in_frames)
 
-        # Create event folder if not exists
-        if not os.path.exists(self._abs_out_dir):
-            os.makedirs(self._abs_out_dir)
-
-    def create(self, filename):
-        if not isinstance(filename, str):
-            filename = str(filename)
+    def create(self, obj_name):
+        if not isinstance(obj_name, str):
+            obj_name = str(obj_name)
         try:
             # Create video writer
             writer = EventVideoWriter(
-                filename,
-                self._rel_out_dir,
-                self._abs_out_dir,
+                obj_name,
+                self._obj_key_prefix,
                 self._video_format,
                 self._roi,
                 self._fps,
@@ -289,13 +295,9 @@ class IntrusionDetector(object):
         self._category_index = load_category_index("./coco.labels")
         self._state = IntrusionDetector.STATE_NORMAL
 
-        # TODO: Should construct the options from configuration file.
-        rel_out_dir = os.path.join("intrusion_detection", anal_id)
-        abs_out_dir = os.path.expanduser(os.path.join(
-            "~/jagereye_shared", rel_out_dir))
+        obj_key_prefix = os.path.join("intrusion_detection", anal_id)
         ev_options = {
-            "rel_out_dir": rel_out_dir,
-            "abs_out_dir": abs_out_dir,
+            "obj_key_prefix": obj_key_prefix,
             "frame_size": frame_size,
             "roi": self._roi,
             "video_format": "mp4",
@@ -388,9 +390,9 @@ class IntrusionDetector(object):
                         timestamp)
                     logging.info("Creating event video: {}".format(timestamp))
                     self._current_event = IntrusionDetectionEvent(
-                        self._current_writer.rel_video_filename,
+                        self._current_writer.video_key,
                         None,
-                        self._current_writer.rel_metadata_filename,
+                        self._current_writer.metadata_key,
                         ev_frames.triggered,
                         timestamp)
                 except RuntimeError as e:
@@ -399,8 +401,7 @@ class IntrusionDetector(object):
                 self._state = IntrusionDetector.STATE_ALERT_START
         elif self._state == IntrusionDetector.STATE_ALERT_START:
             self._current_writer.write(ev_frames, thumbnail=True)
-            self._current_event.thumbnail = (self._current_writer
-                                             .rel_thumbnail_filename)
+            self._current_event.thumbnail = (self._current_writer.thumbnail_key)
             self._state = IntrusionDetector.STATE_ALERTING
             return self._current_event
         elif self._state == IntrusionDetector.STATE_ALERTING:
