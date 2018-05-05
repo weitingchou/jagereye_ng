@@ -63,7 +63,7 @@ const eventQueryValidator = ajv.compile(eventQuerySchema);
 
 function validateEventQuery(req, res, next) {
     if(!eventQueryValidator(req.body)) {
-        return next(createError(400, 'Bad Request'));
+        return next(createError(400, eventQueryValidator.errors));
     }
     next();
 }
