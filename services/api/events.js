@@ -1,11 +1,12 @@
 const express = require('express')
 const router = express.Router()
-//const { body, validationResult } = require('express-validator/check')
+const Ajv = require('ajv');
 const { createError } = require('./utils')
 
 const { routesWithAuth } = require('./auth')
 
 const mongoose = require('mongoose')
+const ObjectId = mongoose.Types.ObjectId;
 const Schema = mongoose.Schema
 const conn = mongoose.createConnection('mongodb://localhost:27017/jager_test')
 
@@ -16,36 +17,95 @@ const eventSchema = Schema({
     date: Date,
     type: String
 }, { collection: 'events' })
+
 const eventModel = conn.model('events', eventSchema)
 
+const ajv = new Ajv();
+const eventQuerySchema = {
+    type: 'object',
+    properties: {
+        timestamp: {
+            type: 'object',
+            properties: {
+                start: {type: 'integer'},
+                end: {type: 'integer'}
+            },
+            additionalProperties: false
+        },
+        events: {
+            type: 'object',
+            properties: {
+                gt: {type: 'string'},
+                lt: {type: 'string'},
+                gte: {type: 'string'},
+                lte: {type: 'string'}
+            },
+            minProperties: 1,
+            additionalProperties: false
+        },
+        analyzers: {
+            type: 'array',
+            items: {
+                type: 'string'
+            },
+        },
+        types: {
+            type: 'array',
+            items: {
+                type: 'string'
+            },
+        }
+    }
+    ,additionalProperties: false
+}
+
+const eventQueryValidator = ajv.compile(eventQuerySchema);
+
+function validateEventQuery(req, res, next) {
+    if(!eventQueryValidator(req.body)) {
+        return next(createError(400, eventQueryValidator.errors));
+    }
+    next();
+}
 
 function searchEvents(req, res, next) {
     let query = {}
     let body = req.body
 
-    // TODO(Ray): there will be a validator being reponsible for it
-    if (!body['timestamp']['start'] || !body['timestamp']['end']) {
-        return next(createError(400, 'Should specify a time range for querying.'))
+    if(body['timestamp']) {
+        let timestampQuery = {};
+        if (body['timestamp']['start']) {
+            timestampQuery.$gte = body['timestamp']['start']
+        }
+        if (body['timestamp']['end']) {
+            timestampQuery.$lte = body['timestamp']['end']
+        }
+        query['timestamp'] = timestampQuery
     }
-    if ((typeof body['timestamp']['start'] !== 'number') ||
-        (typeof body['timestamp']['end'] !== 'number')) {
-        return next(createError(400, "Invalid timestamp format, should be number"))
+
+    if(body['events']) {
+        let eventIdQuery = {};
+        if (body['events']['gt']) {
+            eventIdQuery.$gt = ObjectId(body['events']['gt'])
+        }
+        if (body['events']['lt']) {
+            eventIdQuery.$lt = ObjectId(body['events']['lt'])
+        }
+        if (body['events']['gte']) {
+            eventIdQuery.$lt = ObjectId(body['events']['gte'])
+        }
+
+        if (body['events']['lte']) {
+            eventIdQuery.$lt = ObjectId(body['events']['lte'])
+        }
+        query['_id'] = eventIdQuery
     }
-    query['timestamp'] = {$gte: body['timestamp']['start'], $lt: body['timestamp']['end']}
 
     if (body['analyzers']) {
-        // TODO(Ray): there will be a validator being reponsible for it
-        if (!Array.isArray(body['analyzers'])) {
-            return next(createError(400, 'analyzers should be a list'))
-        }
         query['analyzerId'] = {'$in': body['analyzers']}
     }
 
     if (body['types']) {
-        // TODO(Ray): there will be a validator being reponsible for it
-        if (!Array.isArray(body['types'])) {
-            return next(createError(400, 'type should be a list'))
-        }
         query['type'] = {'$in': body['types']}
     }
 
@@ -61,7 +121,7 @@ function searchEvents(req, res, next) {
  */
 routesWithAuth(
     router,
-    ['post', '/events', searchEvents],
+    ['post', '/events', validateEventQuery, searchEvents],
 )
 
 module.exports = router
