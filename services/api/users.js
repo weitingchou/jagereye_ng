@@ -47,6 +47,19 @@ const changePasswordValidator = checkSchema({
     },
 })
 
+function isSelfOrAdmin(req, res, next) {
+    if (config.services.api.token.enabled) {
+        const { id: targetId } = req.params
+        const { _id: requesterId, role: requesterRole } = req.user
+
+        if (requesterRole !== ROLES.ADMIN && requesterId.toString() !== targetId) {
+            return next(createError(400, 'Request non-self user'))
+        }
+    }
+
+    next()
+}
+
 async function getAllUsers(req, res, next) {
     try {
         const list = await models.users.find({}, getUserProjection)
@@ -80,21 +93,14 @@ async function createUser(req, res, next) {
 }
 
 async function getUser(req, res, next) {
-    const { id: targetId } = req.params
-    const { _id: requesterId, role: requesterRole } = req.user
+    const { id } = req.params
 
-    if (!isValidId(targetId)) {
-        return next(createError(400, 'Unvalid ID'))
-    }
-
-    // TODO(JiaKuan Su): The rule to get user should be discussed.
-    // Non-admin user can only get its information.
-    if (requesterRole !== ROLES.ADMIN && requesterId.toString() !== targetId) {
-        return next(createError(400, 'Request non-self user'))
+    if (!isValidId(id)) {
+        return next(createError(400, 'Invalid ID'))
     }
 
     try {
-        const result = await models.users.findById(targetId, getUserProjection)
+        const result = await models.users.findById(id, getUserProjection)
 
         if (!result) {
             return next(createError(404, 'User not existed'))
@@ -107,19 +113,14 @@ async function getUser(req, res, next) {
 }
 
 async function deleteUser(req, res, next) {
-    const { id: targetId } = req.params
-    const { _id: requesterId, role: requesterRole } = req.user
+    const { id } = req.params
 
-    if (!isValidId(targetId)) {
-        return next(createError(400, 'Unvalid ID'))
-    }
-
-    if (requesterRole !== ROLES.ADMIN && requesterId.toString() !== targetId) {
-        return next(createError(400, 'Request non-self user'))
+    if (!isValidId(id)) {
+        return next(createError(400, 'Invalid ID'))
     }
 
     try {
-        const targetUser = await models.users.findById(targetId)
+        const targetUser = await models.users.findById(id)
 
         if (!targetUser) {
             return next(createError(404, 'User not existed'))
@@ -130,7 +131,7 @@ async function deleteUser(req, res, next) {
             return next(createError(400, 'Deletion of admin user is not allowed'))
         }
 
-        const result = await models.users.findByIdAndRemove(targetId)
+        const result = await models.users.findByIdAndRemove(id)
 
         if (!result) {
             return next(createError(404, 'User not existed'))
@@ -143,15 +144,10 @@ async function deleteUser(req, res, next) {
 }
 
 async function changePassword(req, res, next) {
-    const { id: targetId } = req.params
-    const { _id: requesterId, role: requesterRole } = req.user
+    const { id } = req.params
 
-    if (!isValidId(targetId)) {
-        return next(createError(400, 'Unvalid ID'))
-    }
-
-    if (requesterRole !== ROLES.ADMIN && requesterId.toString() !== targetId) {
-        return next(createError(400, 'Request non-self user'))
+    if (!isValidId(id)) {
+        return next(createError(400, 'Invalid ID'))
     }
 
     try {
@@ -163,7 +159,7 @@ async function changePassword(req, res, next) {
             new: true,
             runValidators: true,
         }
-        const result = await models.users.findByIdAndUpdate(targetId, updated, options)
+        const result = await models.users.findByIdAndUpdate(id, updated, options)
 
         if (!result) {
             return next(createError(404, 'User not existed'))
@@ -231,9 +227,9 @@ routesWithAuth(
 )
 routesWithAuth(
     router,
-    ['get', '/user/:id', getUser],
-    ['delete', '/user/:id', deleteUser],
-    ['patch', '/user/:id/password', changePasswordValidator, validate, changePassword],
+    ['get', '/user/:id', isSelfOrAdmin, getUser],
+    ['delete', '/user/:id', isSelfOrAdmin, deleteUser],
+    ['patch', '/user/:id/password', isSelfOrAdmin, changePasswordValidator, validate, changePassword],
 )
 router.post('/login', userValidator, validate, login)
 
