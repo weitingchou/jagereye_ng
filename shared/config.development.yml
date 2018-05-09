@@ -35,6 +35,21 @@ services:
             docker_sock: /var/run/docker.sock:/var/run/docker.sock
         worker:
             network_mode: host
+    expiration:
+        version: "0.0.1"
+        network_mode: host
+        params:
+            # Database host URL.
+            db_host: 'mongodb://localhost:27017/jager_test'
+            # Expiration period in days.
+            expiration_days: 30
+            # The maximum allowance of event records.
+            # The number "400,000" is for 1TB storage space, it assumes each event
+            # contains about 2.2MB, including the database record, a 10-seconds video,
+            # a thumbnail and a metadata json file.
+            max_event_records: 400000
+            # Repeat period of expiration function (in minutes).
+            repeat_period_mins: 10
     obj_storage:
         version: "minio-RELEASE.2018-04-04T05-20-54Z"
         network_mode: host
