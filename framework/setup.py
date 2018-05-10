@@ -1,8 +1,11 @@
 import glob
 import os
+from pip._internal import main as pip_main
 from setuptools import Command
 from setuptools import find_packages
 from setuptools import setup
+from setuptools.command.install import install
+from setuptools.command.test import test
 from shutil import copy
 from shutil import rmtree
 import subprocess
@@ -25,6 +28,26 @@ TESTS_REQUIRED=[
 
 # The framwork directory path.
 FRAMEWORK_DIR = os.path.dirname(os.path.join(os.getcwd(), __file__))
+
+
+def install_requirements():
+    pip_main(['install', '-r', './requirements.txt'])
+
+
+class InstallCommand(install):
+    """Command to install framework."""
+
+    def run(self):
+        install_requirements()
+        install.run(self)
+
+
+class TestCommand(test):
+    """Command to test framework."""
+
+    def run(self):
+        install_requirements()
+        test.run(self)
 
 
 class DocCommand(Command):
@@ -127,18 +150,6 @@ def cp_static_files(static_files):
             print('Copy {} into {}'.format(static_file, static_dir))
 
 
-def load_requirements():
-    """Load requirements files."""
-    requirements = []
-    req_files = glob.glob('./requirements*.txt')
-    for req_file in req_files:
-        with open(req_file) as f:
-            content = f.readlines()
-        lines = [x.strip() for x in content]
-        requirements = requirements + list(set(lines) - set(requirements))
-    return requirements
-
-
 def main():
     # Copy static files into framework library directory.
     cp_static_files([
@@ -149,16 +160,12 @@ def main():
         abspath('../shared/worker.json')
     ])
 
-    # Load the requirements.
-    install_requires = load_requirements()
-
     # Now, run the setup script.
     setup(
         name=NAME,
         version=VERSION,
         description=DESCRIPTION,
         packages=find_packages(include=[NAME, '{}.*'.format(NAME)]),
-        install_requires=install_requires,
         include_package_data=True,
         setup_requires=SETUP_REQUIRED,
         tests_require=TESTS_REQUIRED,
@@ -166,7 +173,9 @@ def main():
         cmdclass = {
             'doc': DocCommand,
             'docker': DockerCommand,
-            'lint': LintCommand
+            'install': InstallCommand,
+            'lint': LintCommand,
+            'test': TestCommand
         }
     )
 
