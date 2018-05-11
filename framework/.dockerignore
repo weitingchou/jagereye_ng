@@ -1,0 +1,41 @@
+# Git
+.git*
+
+# Docker
+*Dockerfile*
+.dockerignore
+
+# Python
+db.sqlite3
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env
+pip-log.txt
+pip-delete-this-directory.txt
+.tox
+.coverage
+.coverage.*
+.cache
+coverage.xml
+*,cover
+*.log
+build
+dist
+jagereye_ng.egg-info
+
+# Auto-generated tag files
+tags
+
+# OSX
+.DS_Store
+
+# Vim
+[._]*.s[a-w][a-z]
+[._]s[a-w][a-z]
+*.un~
+Session.vim
+.netrwhist
+*~

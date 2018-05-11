@@ -31,7 +31,7 @@ FRAMEWORK_DIR = os.path.dirname(os.path.join(os.getcwd(), __file__))
 
 
 def install_requirements():
-    pip_main(['install', '-r', './requirements.txt'])
+    subprocess.check_call(['pip3', '--no-cache-dir', 'install', '-r', './requirements.txt'])
 
 
 class InstallCommand(install):
@@ -86,40 +86,25 @@ class DockerCommand(Command):
     """Command to build docker images."""
 
     description = 'Build docker images.'
-    user_options = [
-        ('target=', None, 'Target to build')
-    ]
-    supported_targets = [
-        'worker',
-        'brain'
-    ]
+    user_options = []
 
     def initialize_options(self):
-        self.target = None
+        pass
 
     def finalize_options(self):
-        if self.target is not None:
-            if self.target not in self.supported_targets:
-                raise Exception('Unsupported docker image: {}'
-                                .format(self.target))
+        pass
 
     def run(self):
-        if self.target is not None:
-            self._build(self.target)
-        else:
-            for target in self.supported_targets:
-                self._build(target)
+        self._build('Dockerfile', 'jagereye/framework')
 
-    def _build(self, target):
-        docker_file = 'docker/Dockerfile.{}'.format(target)
-        image_name = 'jagereye_ng/{}'.format(target)
+    def _build(self, docker_file, image_name):
         docker_cmd = [
             'docker', 'build',
             '-f', docker_file,
             '-t', image_name,
             '.'
         ]
-        print('Building Docker: file = {}, image={}'
+        print('Building Docker: file = {}, image = {}'
               .format(docker_file, image_name))
         subprocess.check_call(docker_cmd)
 
