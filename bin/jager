@@ -51,6 +51,7 @@ Targets:
     apps            Only build applications
     appbase         Only build application base images (Note: it does NOT take any arguments)
     services        Only build services
+    servicebase     Only build service base images (Note: it does NOT take any arguments)
 
 [NOTE] 1. 'apps', including the apps part in 'all', is built by 'docker' instead of 'docker-compose', so beware of
           the use of arguments.
@@ -62,7 +63,7 @@ Targets:
     if (( $# > 0 )); then
         target=${1}
         case "${target}" in
-            all|apps|appbase|services)
+            all|apps|appbase|services|servicebase)
                 shift
                 ;;
             -h|--help)
@@ -94,6 +95,9 @@ Targets:
     elif [ "${target}" == "services" ]; then
         jager::prepare_build services
         jager::build_services "${args}"
+    elif [ "${target}" == "servicebase" ]; then
+        jager::prepare_build docker
+        jager::build_servicebase
     fi
 }
 
@@ -152,13 +156,12 @@ jager::build_services() {
 jager::build_apps() {
     local args="${1}"
 
-    local app_list=$(ls -d ./apps/*/)
-    for item in ${app_list}; do
-        local appname=`basename ${item}`
-        cd ${BUILD_FOLDER}/apps/${appname}/brain
-        echo "Run 'docker build -t jagereye/brain_${appname} ${args} .'"
-        docker build -t jagereye/brain_${appname} ${args} .
-    done
+    # TODO(JiaKuan Su): Find application names automatically when there are
+    #                   more than 1 application.
+    local appname="intrusion_detection"
+    cd ${BUILD_FOLDER}/apps
+    echo "Run 'docker build -t jagereye/${appname} ${args} .'"
+    docker build -t jagereye/${appname} ${args} .
 }
 
 jager::build_all() {
@@ -169,6 +172,12 @@ jager::build_all() {
 jager::build_appbase() {
     cd ${BUILD_FOLDER}/framework
     python3 setup.py docker
+}
+
+jager::build_servicebase() {
+    cd ${BUILD_FOLDER}/docker
+    docker build -t jagereye/nodejs -f Dockerfile.nodejs .
+    echo "Run 'docker build -t jagereye/nodejs -f services/Dockerfile.nodejs .'"
 }
 
 jager::start() {

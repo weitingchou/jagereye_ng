@@ -1,0 +1,75 @@
+#
+# This file was generated automatically, please don't modify it unless you know what you're doing
+#
+---
+version: "2"
+services:
+    {%- if services %}
+    api:
+        {%- if build %}
+        build: "{{services.api.buildpath}}"
+        {%- endif %}
+        image: "jagereye/api:{{services.api.version}}"
+        network_mode: "{{services.api.network_mode}}"
+        ports:
+            {%- for _, port in services.api.ports.items() %}
+            - "{{port}}"
+            {%- endfor %}
+        depends_on:
+            - database
+            - messaging
+        environment:
+            - JAGERENV={{environ.JAGERENV}}
+    database:
+        {%- if build %}
+        build: "{{services.database.buildpath}}"
+        {%- endif %}
+        image: "jagereye/database:{{services.database.version}}"
+        network_mode: "{{services.database.network_mode}}"
+        ports:
+            {%- for key, port in services.database.ports.items() %}
+            - "{{port}}"
+            {%- endfor %}
+        environment:
+            - JAGERENV={{environ.JAGERENV}}
+    messaging:
+        {%- if build %}
+        build: "{{services.messaging.buildpath}}"
+        {%- endif %}
+        image: "jagereye/messaging:{{services.messaging.version}}"
+        network_mode: "{{services.messaging.network_mode}}"
+        ports:
+            {%- for key, port in services.messaging.ports.items() %}
+            - "{{port}}"
+            {%- endfor %}
+        environment:
+            - JAGERENV={{environ.JAGERENV}}
+    obj_storage:
+        {%- if build %}
+        build: "{{services.obj_storage.buildpath}}"
+        {%- endif %}
+        image: "jagereye/obj_storage:{{services.obj_storage.version}}"
+        network_mode: "{{services.obj_storage.network_mode}}"
+        ports:
+            {%- for key, port in services.obj_storage.ports.items() %}
+            - "{{port}}"
+            {%- endfor %}
+        environment:
+            - JAGERENV={{environ.JAGERENV}}
+            - ACCESS_KEY={{services.obj_storage.credentials.access_key}}
+            - SECRET_KEY={{services.obj_storage.credentials.secret_key}}
+    {%- endif %}
+    {%- if apps %}
+    {%- for app, content in apps.items() %}
+    {{app}}:
+        image: "jagereye/{{app}}"
+        network_mode: "{{content.network_mode}}"
+        {%- if services %}
+        depends_on:
+            - database
+            - messaging
+        {%- endif %}
+        environment:
+            - JAGERENV={{environ.JAGERENV}}
+    {%- endfor %}
+    {%- endif %}
