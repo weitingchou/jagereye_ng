@@ -4,6 +4,14 @@ MAINTAINER SuJiaKuan <feabries@gmail.com>
 
 WORKDIR ${HOME}
 
+# Install ffmpeg.
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ffmpeg && \
+        apt-get clean && \
+        rm -rf /var/lib/apt/lists/*
+USER jager
+
 # Create services structure
 RUN mkdir -p jagereye_ng/services/api
 RUN mkdir -p jagereye_ng/shared
