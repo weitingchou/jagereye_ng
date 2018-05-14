@@ -13,6 +13,11 @@ RUN rm $MODEL_NAME.tar.gz
 RUN find . ! -name 'frozen_inference_graph.pb' -type f -exec rm -r {} +
 WORKDIR ${HOME}
 
+# Install the dependencies.
+RUN pip3 --no-cache-dir install \
+        shapely==1.6.4 \
+        --user
+
 # Copy files about intrusion detection.
 # TODO(JiaKuan Su): Use .pyc only.
 COPY --chown=jager:jager analyzer.py .
