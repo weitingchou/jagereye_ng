@@ -1,6 +1,5 @@
 import glob
 import os
-from pip._internal import main as pip_main
 from setuptools import Command
 from setuptools import find_packages
 from setuptools import setup
