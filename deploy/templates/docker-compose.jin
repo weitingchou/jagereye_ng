@@ -2,7 +2,7 @@
 # This file was generated automatically, please don't modify it unless you know what you're doing
 #
 ---
-version: "2"
+version: "2.3"
 services:
     {%- if services %}
     api:
@@ -69,6 +69,7 @@ services:
             - database
             - messaging
         {%- endif %}
+        runtime: nvidia
         environment:
             - JAGERENV={{environ.JAGERENV}}
     {%- endfor %}

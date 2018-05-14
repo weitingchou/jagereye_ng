@@ -9,7 +9,7 @@ JagerEye is a large distributed scale video analysis framework.
 The following packages are required before installation
 - docker>=17.09.0
 - nvidia-docker2
-- docker-compose
+- docker-compose>=1.19.0
 - python>=3.5
 - pip3
 
