@@ -25,7 +25,7 @@ cd jagereye_ng
 ```bash
 # The root directory of the project.
 export JAGERROOT=$(pwd)
-# The mode to build JagerEye, it can be 'development' or 'production'/
+# The mode to build JagerEye, it can be 'development' or 'production'
 export JAGERENV=development
 # Path to the binary folder.
 export PATH=$JAGERROOT/bin:$PATH
