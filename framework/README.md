@@ -22,6 +22,14 @@ You can install framework on your host machine, or build Docker images that cont
 python3 setup.py install --user
 ```
 
+* Alternatively, you can also use `jager` command (as described in [here](https://github.com/weitingchou/jagereye_ng)) to install.
+
+```bash
+# The following instruction installs framework on your own home directory. You can also
+# run 'sudo jager install' to install framework on system.
+jager install --user
+```
+
 ### On Docker
 
 * Install Python 3 (>= 3.5).
@@ -35,3 +43,5 @@ python3 setup.py install --user
 ```bash
 python3 setup.py docker --target=worker
 ```
+
+* Now, you have a new image called `jagereye/framework` that contains the framework library.
