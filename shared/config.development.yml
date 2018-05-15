@@ -10,6 +10,7 @@ services:
             username: "admin"
             default_password: "admin"
         token:
+            enabled: true
             secret: "jagereye_dev"
         settings:
             control_port:

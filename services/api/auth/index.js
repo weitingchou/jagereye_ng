@@ -3,6 +3,7 @@ const slice = require('lodash/slice')
 
 const { authenticate } = require('./passport')
 const { authorize } = require('./acl')
+const config = require('../config')
 
 function routesWithAuth(router, ...routes) {
     forEach(routes, route => {
@@ -10,8 +11,11 @@ function routesWithAuth(router, ...routes) {
         const url = route[1]
         const middlewares = slice(route, 2, route.length)
 
-        //router[method](url, authenticate, authorize, ...middlewares)
-        router[method](url, ...middlewares)
+        if (config.services.api.token.enabled) {
+            router[method](url, authenticate, authorize, ...middlewares)
+        } else {
+            router[method](url, ...middlewares)
+        }
     })
 }
 
