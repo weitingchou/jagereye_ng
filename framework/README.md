@@ -14,6 +14,8 @@ You can install framework on your host machine, or build Docker images that cont
 
 * Install pip3.
 
+* Install cuda 9.0 and cudnn 7.0.5.
+
 * Run the installation script.
 
 ```bash

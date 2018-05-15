@@ -4,13 +4,16 @@ MAINTAINER SuJiaKuan <feabries@gmail.com>
 
 ENV NUMPY_VERSION 1.14.3
 ENV OPENCV_VERSION 3.3.1
+ENV CUDNN_MAJOR_VERSION 7
+ENV CUDNN_FULL_VERSION 7.0.5.15-1+cuda9.0
 
 WORKDIR /root
 
 # Install system packages.
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends --allow-downgrades \
         build-essential \
         cmake \
+        libcudnn${CUDNN_MAJOR_VERSION}=${CUDNN_FULL_VERSION} \
         gstreamer1.0-libav \
         gstreamer1.0-plugins-bad \
         gstreamer1.0-plugins-base \
