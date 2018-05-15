@@ -10,7 +10,8 @@ function routesWithAuth(router, ...routes) {
         const url = route[1]
         const middlewares = slice(route, 2, route.length)
 
-        router[method](url, authenticate, authorize, ...middlewares)
+        //router[method](url, authenticate, authorize, ...middlewares)
+        router[method](url, ...middlewares)
     })
 }
 
