@@ -1,7 +1,7 @@
 const P = require('bluebird');
 const TimeoutError = P.TimeoutError;
 const fs = P.promisifyAll(require('fs'));
-const shell = require('shelljs');
+const execAsync = P.promisify(require('child_process').exec);
 const format = require('util').format;
 
 const dataportInterfaceFilename = 'jagereye_dataport_interface';
@@ -23,37 +23,14 @@ async function genInterfaceFile(filename, networkInterface, mode, address, netma
     if(mode !== 'static') {
         return;
     }
-    else {
-        await fs.appendFileAsync(filename, format('address %s\nnetmask %s\ngateway %s', address, netmask, gateway));
-        return;
-    }
-}
-
-function execAsync(cmd) {
-    return new P((resolve, reject) => {
-        let run = shell.exec(cmd, {async: true},
-            (code) => {
-                if(code !== 0) {
-                    throw new ResetNetworkError('Shell cmd failed: "'+ cmd + '"');
-                }
-                return resolve(code);
-            });
-    })
-    .timeout(shellTimeout)
-    .catch((e) => {
-        if (e instanceof TimeoutError) {
-            throw new ResetNetworkError('Shell cmd timeout: "'+ cmd + '"');
-        }
-        // TODO: logging
-        console.error(e);
-    });
+    await fs.appendFileAsync(filename, format('address %s\nnetmask %s\ngateway %s', address, netmask, gateway));
 }
 
 async function resetNetworkInterface(networkInterface, mode, address, netmask, gateway) {
     await genInterfaceFile(dataportInterfaceFilename, networkInterface, mode, address, netmask, gateway);
-    await execAsync('sudo ip addr flush dev '+ networkInterface);
-    await execAsync('sudo cp ' + dataportInterfaceFilename + ' /etc/network/interfaces.d/');
-    await execAsync('sudo /etc/init.d/networking restart');
+    await execAsync('sudo ip addr flush dev '+ networkInterface, {timeout: shellTimeout});
+    await execAsync('sudo cp ' + dataportInterfaceFilename + ' /etc/network/interfaces.d/', {timeout: shellTimeout});
+    await execAsync('sudo /etc/init.d/networking restart', {timeout: shellTimeout});
 }
 
 
@@ -61,10 +38,3 @@ module.exports = {
     resetNetworkInterface: resetNetworkInterface,
     ResetNetworkError: ResetNetworkError
 };
-
-//genInterfaceFile(dataportInterfaceFilename, 'enp5s0', 'dhcp')
-//genInterfaceFile(dataportInterfaceFilename, 'enp5s0', 'static', '192.168.1.1', '255.255.255.0', '192.168.1.1')
-//    resetNetworkInterface('enp5s0', 'static', '192.168.1.1', '255.255.255.0', '192.168.1.1')
-//.catch((e)=>{console.log('llllllllllllll', e)})
-//resetNetworkInterface('enp5s0', 'static', '192.168.1.111', '255.255.255.0', '192.168.1.1')
-

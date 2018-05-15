@@ -46,7 +46,8 @@ const settingPatchSchema = {
                     pattern: '^dhcp$',
                 },
             },
-            additionalProperties: false
+            additionalProperties: false,
+            required: ['mode']
         },
     ]
 }
@@ -55,7 +56,7 @@ const settingPatchValidator = ajv.compile(settingPatchSchema);
 
 function validateSettingPatch(req, res, next) {
     if(!settingPatchValidator(req.body)) {
-        // TODO: return msg should be refine
+        // TODO: returned msg should be refine
         return next(createError(400, settingPatchValidator.errors));
     }
     next();
@@ -76,33 +77,33 @@ async function patchSettings(req, res, next) {
     newSettings.netmask = netmask;
     newSettings.gateway = gateway;
     newSettings.status = 'processing';
+    // First, insert record in db and response
     await settingsModel.updateAsync({'_id': 1}, newSettings, {'upsert': true});
     res.status(200).send();
     // start configure network interface
     try {
         await resetNetworkInterface(dataPortInterface, mode, addr, netmask, gateway);
+        // update the status in db
+        newSettings.status = 'done';
+        await settingsModel.updateAsync({'_id': 1}, newSettings, {'upsert': true});
     } catch (err) {
-        if (err instanceof ResetNetworkError) {
-            newSettings.status = 'failed';
-            await settingsModel.updateAsync({'_id': 1}, newSettings, {'upsert': true});
-        }
+        newSettings.status = 'failed';
+        await settingsModel.updateAsync({'_id': 1}, newSettings, {'upsert': true});
         // TODO: logging
         console.error(err);
     };
 }
 
 async function getSettings(req, res, next) {
-    return settingsModel.findOne({'_id': 1})
-    .then((result) =>{
-        if(result.mode === 'dhcp') {
-            result.netmask = undefined;
-            result.gateway = undefined;
-            if(result.status == 'processing') {
-                result.address = 'None'
-            }
+    let result = await settingsModel.findOne({'_id': 1});
+    if(result.mode === 'dhcp') {
+        result.netmask = undefined;
+        result.gateway = undefined;
+        if(result.status != 'done') {
+            result.address = 'None'
         }
-        res.status(200).send(result);
-    });
+    }
+    res.status(200).send(result);
 }
 
 async function createDefaultNetworkSetting() {
@@ -117,11 +118,9 @@ async function createDefaultNetworkSetting() {
             await settingsModel.updateAsync({'_id': 1}, defaultSettings, {'upsert': true});
             await resetNetworkInterface(dataPortInterface ,'dhcp');
         } catch (err) {
+            defaultSettings.status = 'failed';
+            await settingsModel.updateAsync({'_id': 1}, defaultSettings, {'upsert': true});
             // TODO: logging
-            if (err instanceof ResetNetworkError) {
-                defaultSettings.status = 'failed';
-                await settingsModel.updateAsync({'_id': 1}, defaultSettings, {'upsert': true});
-            }
             console.error(err)
         }
     }
