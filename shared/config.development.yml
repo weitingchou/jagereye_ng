@@ -11,6 +11,12 @@ services:
             default_password: "admin"
         token:
             secret: "jagereye_dev"
+        settings:
+            control_port:
+                device: "enp1s0"
+                static_ip: "192.168.20.1"
+            data_port:
+                device: "enp2s0"
     database:
         version: "mongo-3.6.0"
         db_name: jagereye-dev

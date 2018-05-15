@@ -1,15 +1,16 @@
 const express = require('express');
 const router = express.Router();
 const Ajv = require('ajv');
+const P = require('bluebird');
+
+const config = require('./config').services.api.settings;
+const models = require('./database');
+const settingsModel = P.promisifyAll(models['settings']);
 const { createError } = require('./utils');
 const { routesWithAuth } = require('./auth');
-const models = require('./database');
-const P = require('bluebird');
-const settingsModel = P.promisifyAll(models['settings']);
-const { resetNetworkInterface, ResetNetworkError } = require('./setting');
+const { resetNetworkInterface, ResetNetworkError } = require('./settings_utils');
 
-// TODO: it is defined by config
-const networkInterface = 'enp5s0';
+const dataPortInterface = config.data_port.device;
 
 const ajv = new Ajv();
 const settingPatchSchema = {
@@ -60,7 +61,7 @@ function validateSettingPatch(req, res, next) {
     next();
 }
 
-function patchSettings(req, res, next) {
+async function patchSettings(req, res, next) {
     let query = {}
     let body = req.body
 
@@ -75,22 +76,19 @@ function patchSettings(req, res, next) {
     newSettings.netmask = netmask;
     newSettings.gateway = gateway;
     newSettings.status = 'processing';
-    return settingsModel.updateAsync({'_id': 1}, newSettings, {'upsert': true})
-        .then((result) => {
-            res.status(200).send();
-
-            // start configure network interface
-            await resetNetworkInterface(networkInterface, mode, addr, netmask, gateway);
-        })
-        .catch((err) => {
-            if (err instanceof ResetNetworkError) {
-                newSettings.status = 'failed';
-                await settingsModel.updateAsync({'_id': 1}, newSettings, {'upsert': true});
-            }
-            // TODO: logging
-            console.error(err);
-            return next(createError(500, 'Interal Server Error'));
-        });
+    await settingsModel.updateAsync({'_id': 1}, newSettings, {'upsert': true});
+    res.status(200).send();
+    // start configure network interface
+    try {
+        await resetNetworkInterface(dataPortInterface, mode, addr, netmask, gateway);
+    } catch (err) {
+        if (err instanceof ResetNetworkError) {
+            newSettings.status = 'failed';
+            await settingsModel.updateAsync({'_id': 1}, newSettings, {'upsert': true});
+        }
+        // TODO: logging
+        console.error(err);
+    };
 }
 
 async function getSettings(req, res, next) {
@@ -117,7 +115,7 @@ async function createDefaultNetworkSetting() {
         defaultSettings.status = 'processing';
         try {
             await settingsModel.updateAsync({'_id': 1}, defaultSettings, {'upsert': true});
-            await resetNetworkInterface(networkInterface ,'dhcp');
+            await resetNetworkInterface(dataPortInterface ,'dhcp');
         } catch (err) {
             // TODO: logging
             if (err instanceof ResetNetworkError) {
