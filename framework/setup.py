@@ -3,6 +3,8 @@ import os
 from setuptools import Command
 from setuptools import find_packages
 from setuptools import setup
+from setuptools.command.install import install
+from setuptools.command.test import test
 from shutil import copy
 from shutil import rmtree
 import subprocess
@@ -25,6 +27,26 @@ TESTS_REQUIRED=[
 
 # The framwork directory path.
 FRAMEWORK_DIR = os.path.dirname(os.path.join(os.getcwd(), __file__))
+
+
+def install_requirements():
+    subprocess.check_call(['pip3', '--no-cache-dir', 'install', '-r', './requirements.txt'])
+
+
+class InstallCommand(install):
+    """Command to install framework."""
+
+    def run(self):
+        install_requirements()
+        install.run(self)
+
+
+class TestCommand(test):
+    """Command to test framework."""
+
+    def run(self):
+        install_requirements()
+        test.run(self)
 
 
 class DocCommand(Command):
@@ -63,40 +85,25 @@ class DockerCommand(Command):
     """Command to build docker images."""
 
     description = 'Build docker images.'
-    user_options = [
-        ('target=', None, 'Target to build')
-    ]
-    supported_targets = [
-        'worker',
-        'brain'
-    ]
+    user_options = []
 
     def initialize_options(self):
-        self.target = None
+        pass
 
     def finalize_options(self):
-        if self.target is not None:
-            if self.target not in self.supported_targets:
-                raise Exception('Unsupported docker image: {}'
-                                .format(self.target))
+        pass
 
     def run(self):
-        if self.target is not None:
-            self._build(self.target)
-        else:
-            for target in self.supported_targets:
-                self._build(target)
+        self._build('Dockerfile', 'jagereye/framework')
 
-    def _build(self, target):
-        docker_file = 'docker/Dockerfile.{}'.format(target)
-        image_name = 'jagereye_ng/{}'.format(target)
+    def _build(self, docker_file, image_name):
         docker_cmd = [
             'docker', 'build',
             '-f', docker_file,
             '-t', image_name,
             '.'
         ]
-        print('Building Docker: file = {}, image={}'
+        print('Building Docker: file = {}, image = {}'
               .format(docker_file, image_name))
         subprocess.check_call(docker_cmd)
 
@@ -127,18 +134,6 @@ def cp_static_files(static_files):
             print('Copy {} into {}'.format(static_file, static_dir))
 
 
-def load_requirements():
-    """Load requirements files."""
-    requirements = []
-    req_files = glob.glob('./requirements*.txt')
-    for req_file in req_files:
-        with open(req_file) as f:
-            content = f.readlines()
-        lines = [x.strip() for x in content]
-        requirements = requirements + list(set(lines) - set(requirements))
-    return requirements
-
-
 def main():
     # Copy static files into framework library directory.
     cp_static_files([
@@ -149,16 +144,12 @@ def main():
         abspath('../shared/worker.json')
     ])
 
-    # Load the requirements.
-    install_requires = load_requirements()
-
     # Now, run the setup script.
     setup(
         name=NAME,
         version=VERSION,
         description=DESCRIPTION,
         packages=find_packages(include=[NAME, '{}.*'.format(NAME)]),
-        install_requires=install_requires,
         include_package_data=True,
         setup_requires=SETUP_REQUIRED,
         tests_require=TESTS_REQUIRED,
@@ -166,7 +157,9 @@ def main():
         cmdclass = {
             'doc': DocCommand,
             'docker': DockerCommand,
-            'lint': LintCommand
+            'install': InstallCommand,
+            'lint': LintCommand,
+            'test': TestCommand
         }
     )
 
