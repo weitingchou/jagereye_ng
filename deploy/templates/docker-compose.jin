@@ -68,6 +68,7 @@ services:
         depends_on:
             - database
             - messaging
+            - obj_storage
         {%- endif %}
         runtime: nvidia
         environment:
