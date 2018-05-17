@@ -237,9 +237,7 @@ def analyzer_main_func(signal, cluster, anal_id, name, source, pipelines):
                     message = {
                         "analyzerId": anal_id,
                         "timestamp": event.timestamp,
-                        "date": (datetime.datetime
-                                 .fromtimestamp(event.timestamp)
-                                 .strftime("%Y-%m-%d %H:%M:%S")),
+                        "date": datetime.datetime.utcfromtimestamp(event.timestamp),
                         "type": event.name,
                         "content": event.content
                     }
