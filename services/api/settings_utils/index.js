@@ -1,6 +1,3 @@
-const { resetNetworkInterface, ResetNetworkError } = require('./resetNetworkInterface.js')
+const resetNetworkInterface = require('./resetNetworkInterface.js')
 
-module.exports = {
-    resetNetworkInterface: resetNetworkInterface,
-    ResetNetworkError: ResetNetworkError
-};
+module.exports = resetNetworkInterface;

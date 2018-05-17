@@ -17,24 +17,30 @@ class ResetNetworkError extends Error {
     }
 };
 
-async function genInterfaceFile(filename, networkInterface, mode, address, netmask, gateway) {
-    await fs.writeFileAsync(filename, 'auto ' + networkInterface + '\n');
-    await fs.appendFileAsync(filename, 'iface ' + networkInterface + ' inet ' + mode + '\n');
-    if(mode !== 'static') {
-        return;
+async function resetNetworkInterface(networkInterface, mode, address, netmask, gateway) {
+    // flush the dataport ip
+    await execAsync(format('sudo ip addr flush dev %s', networkInterface), {timeout: shellTimeout});
+    if(mode === 'static') {
+        await execAsync(format('sudo ifconfig %s %s', networkInterface, address), {timeout: shellTimeout});
     }
-    await fs.appendFileAsync(filename, format('address %s\nnetmask %s\ngateway %s', address, netmask, gateway));
+    else if(mode === 'dhcp') {
+        try {
+            await execAsync(format('sudo dhclient %s', networkInterface), {timeout: shellTimeout});
+        } catch(e){
+            // it happened when the dataport cannot find out dhcp server
+            console.error(e);
+            throw new ResetNetworkError('dhcp failed');
+        }
+    }
 }
 
-async function resetNetworkInterface(networkInterface, mode, address, netmask, gateway) {
-    await genInterfaceFile(dataportInterfaceFilename, networkInterface, mode, address, netmask, gateway);
-    await execAsync('sudo ip addr flush dev '+ networkInterface, {timeout: shellTimeout});
-    await execAsync('sudo cp ' + dataportInterfaceFilename + ' /etc/network/interfaces.d/', {timeout: shellTimeout});
-    await execAsync('sudo /etc/init.d/networking restart', {timeout: shellTimeout});
+async function getInterfaceIp(networkInterface) {
+    return await execAsync(format('/sbin/ifconfig %s | grep "inet addr:" | cut -d: -f2 | awk "{ print $1}"', networkInterface), {timeout: shellTimeout});
 }
 
 
 module.exports = {
     resetNetworkInterface: resetNetworkInterface,
+    getInterfaceIp: getInterfaceIp,
     ResetNetworkError: ResetNetworkError
 };

@@ -8,7 +8,7 @@ const models = require('./database');
 const settingsModel = P.promisifyAll(models['settings']);
 const { createError } = require('./utils');
 const { routesWithAuth } = require('./auth');
-const { resetNetworkInterface, ResetNetworkError } = require('./settings_utils');
+const { resetNetworkInterface, getInterfaceIp, ResetNetworkError } = require('./settings_utils');
 
 const dataPortInterface = config.data_port.device;
 
@@ -85,6 +85,14 @@ async function patchSettings(req, res, next) {
         await resetNetworkInterface(dataPortInterface, mode, addr, netmask, gateway);
         // update the status in db
         newSettings.status = 'done';
+        // get the dhcp ip and update
+        if (mode === 'dhcp') {
+            let dhcp_address = await getInterfaceIp(dataPortInterface);
+            if (!dhcp_address) {
+                throw ResetNetworkError('dhcp failed');
+            }
+            newSettings.address = dhcp_address;
+        }
         await settingsModel.updateAsync({'_id': 1}, newSettings, {'upsert': true});
     } catch (err) {
         newSettings.status = 'failed';
