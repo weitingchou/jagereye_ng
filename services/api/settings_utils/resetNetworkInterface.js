@@ -1,3 +1,4 @@
+const os = require('os')
 const P = require('bluebird');
 const TimeoutError = P.TimeoutError;
 const fs = P.promisifyAll(require('fs'));
@@ -34,10 +35,16 @@ async function resetNetworkInterface(networkInterface, mode, address, netmask, g
     }
 }
 
-async function getInterfaceIp(networkInterface) {
-    return await execAsync(format('/sbin/ifconfig %s | grep "inet addr:" | cut -d: -f2 | awk "{ print $1}"', networkInterface), {timeout: shellTimeout});
+function getInterfaceIp(interfaceName) {
+    let interfaces = os.networkInterfaces();
+    try {
+        let ip = interfaces[interfaceName][0]['address'];
+        return ip;
+    } catch(e) {
+        // TODO: logging
+        return;
+    }
 }
-
 
 module.exports = {
     resetNetworkInterface: resetNetworkInterface,

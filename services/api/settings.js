@@ -87,9 +87,9 @@ async function patchSettings(req, res, next) {
         newSettings.status = 'done';
         // get the dhcp ip and update
         if (mode === 'dhcp') {
-            let dhcp_address = await getInterfaceIp(dataPortInterface);
+            let dhcp_address = getInterfaceIp(dataPortInterface);
             if (!dhcp_address) {
-                throw ResetNetworkError('dhcp failed');
+                throw new ResetNetworkError('dhcp failed');
             }
             newSettings.address = dhcp_address;
         }
@@ -108,7 +108,20 @@ async function getSettings(req, res, next) {
         result.netmask = undefined;
         result.gateway = undefined;
         if(result.status != 'done') {
-            result.address = 'None'
+
+            // Ray: when users set dhcp without port connected,
+            // the port cannot get IP.
+            // whenever user connect the port, the port will receive IP soon.
+            // then the status of the port should be update
+            let dhcp_address = getInterfaceIp(dataPortInterface);
+            if (dhcp_address) {
+                result.address = dhcp_address;
+                result.status = 'done';
+                await settingsModel.updateAsync({'_id': 1}, result, {'upsert': true});
+            }
+            else {
+                result.address = 'None';
+            }
         }
     }
     res.status(200).send(result);
