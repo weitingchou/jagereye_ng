@@ -3,8 +3,6 @@ const HttpStatus = require('http-status-codes');
 const WebSocket = require('ws');
 const MongoClient = require('mongodb').MongoClient;
 
-const format = require('util').format;
-
 const video = require('./video/app.js');
 
 const videoAppPort = 8081;
@@ -12,9 +10,8 @@ const videoAppPort = 8081;
 describe('Analyzer Operations: ', () => {
     describe('green path(create => start => get status => delete): ', () => {
         let analyzerId = null;
-        let mongoCli = null;
         let videoApp = null;
-        let testStartTime = (new Date().getTime() / 1000)
+        const testStartTime = (new Date().getTime() / 1000)
 
         const analyzerInfo = {
             "name": "Front Gate 1",
@@ -39,18 +36,17 @@ describe('Analyzer Operations: ', () => {
         };
 
         beforeAll(async () => {
-            videoApp = new video.videoApp(videoAppPort);
+            videoApp = new video.VideoApp(videoAppPort);
             videoApp.start();
 
-            mongoConn = await MongoClient.connect('mongodb://localhost:27017');
-                const mongoDB = mongoConn.db('jager_test');
-                const analColl = mongoDB.collection('analyzers');
-                const eventColl = mongoDB.collection('events');
-                mongoCli = mongoConn;
-                await analColl.remove({});
-                await eventColl.remove({});
-                mongoConn.close();
-                return;
+            const mongoConn = await MongoClient.connect('mongodb://localhost:27017');
+            const mongoDB = mongoConn.db('jager_test');
+            const analColl = mongoDB.collection('analyzers');
+            const eventColl = mongoDB.collection('events');
+            await analColl.remove({});
+            await eventColl.remove({});
+            mongoConn.close();
+            return;
         });
 
         afterAll(() => {
@@ -66,7 +62,7 @@ describe('Analyzer Operations: ', () => {
                 json: true,
                 resolveWithFullResponse: true
             };
-            let result = await request(options);
+            const result = await request(options);
             expect(result.statusCode).toBe(HttpStatus.CREATED);
             expect(result).toHaveProperty('body');
             expect(result.body).toHaveProperty('_id');
@@ -76,14 +72,13 @@ describe('Analyzer Operations: ', () => {
         // ----- test('create analyzer')
 
         test('start the analyzer', async (done) => {
-            expect(analyzerId).not.toBeNull();
             let options =  {
                 method: 'POST',
                 uri: 'http://localhost:5000/api/v1/analyzer/' + analyzerId + '/start',
                 json: true,
                 resolveWithFullResponse: true
             };
-            let result = await request(options);
+            const result = await request(options);
 
             expect(result.statusCode).toBe(HttpStatus.NO_CONTENT);
             done();
@@ -91,16 +86,14 @@ describe('Analyzer Operations: ', () => {
         // ----- test('start the analyzer')
 
         test('get status of the analyzer', async (done) => {
-            expect(analyzerId).not.toBeNull();
-
             let options =  {
                 method: 'GET',
                 uri: 'http://localhost:5000/api/v1/analyzer/' + analyzerId,
                 json: true,
                 resolveWithFullResponse: true
             };
-            let result = await request(options);
-            expect(result.statusCode).toBe(HttpStatus.CREATED);
+            const result = await request(options);
+            expect(result.statusCode).toBe(HttpStatus.OK);
             expect(result).toHaveProperty('body');
             expect(result.body).toHaveProperty('_id');
             expect(result.body._id).toBe(analyzerId);
@@ -118,37 +111,33 @@ describe('Analyzer Operations: ', () => {
         // ----- test('get status of the analyzer')
 
         test('wait for notification', async (done) => {
-            let ws = new WebSocket('ws://localhost:5000/notification');
+            const ws = new WebSocket('ws://localhost:5000/notification');
 
-                ws.on('message', function incoming(data) {
-                    try {
-                        data = data.replace(/'/g, '"');
-                        notifiedInfo = JSON.parse(data);
-                    } catch (err) {
-                        expect(err).toBeNull();
-                    }
-                    expect(notifiedInfo).toHaveProperty('category');
-                    expect(notifiedInfo.category).toBe('Analyzer');
-                    expect(notifiedInfo).toHaveProperty('message');
-                    let msg = notifiedInfo.message;
-                    expect(msg).toHaveProperty('date');
-                    expect(msg).toHaveProperty('content');
-                    expect(msg).toHaveProperty('type');
-                    expect(msg.type).toBe('intrusion_detection.alert');
-                    expect(msg).toHaveProperty('analyzerId');
-                    expect(msg.analyzerId).toBe(analyzerId);
-                    expect(msg).toHaveProperty('timestamp');
-                    expect(typeof(msg.timestamp)).toBe('number');
+            ws.on('message', function incoming(data) {
+                data = data.replace(/'/g, '"');
+                notifiedInfo = JSON.parse(data);
 
-                    let content = msg.content;
-                    expect(content).toHaveProperty('video');
-                    expect(content).toHaveProperty('metadata');
-                    expect(content).toHaveProperty('thumbnail');
-                    expect(content).toHaveProperty('triggered');
-                    ws.close();
-                    done();
+                expect(notifiedInfo).toHaveProperty('category');
+                expect(notifiedInfo.category).toBe('Analyzer');
+                expect(notifiedInfo).toHaveProperty('message');
+                const msg = notifiedInfo.message;
+                expect(msg).toHaveProperty('date');
+                expect(msg).toHaveProperty('content');
+                expect(msg).toHaveProperty('type');
+                expect(msg.type).toBe('intrusion_detection.alert');
+                expect(msg).toHaveProperty('analyzerId');
+                expect(msg.analyzerId).toBe(analyzerId);
+                expect(msg).toHaveProperty('timestamp');
+                expect(typeof(msg.timestamp)).toBe('number');
 
-                });
+                const content = msg.content;
+                expect(content).toHaveProperty('video');
+                expect(content).toHaveProperty('metadata');
+                expect(content).toHaveProperty('thumbnail');
+                expect(content).toHaveProperty('triggered');
+                ws.close();
+                done();
+            });
 
         });
         // ----- test('wait for events')
@@ -170,11 +159,11 @@ describe('Analyzer Operations: ', () => {
                 json: true,
                 resolveWithFullResponse: true
             };
-            let result = await request(options);
+            const result = await request(options);
             expect(result.statusCode).toBe(HttpStatus.OK);
             expect(result).toHaveProperty('body');
 
-            let eventInfo = result.body[0];
+            const eventInfo = result.body[0];
             expect(eventInfo).toHaveProperty('timestamp');
             expect(eventInfo).toHaveProperty('date');
             expect(eventInfo).toHaveProperty('_id');
@@ -184,7 +173,7 @@ describe('Analyzer Operations: ', () => {
             expect(eventInfo).toHaveProperty('type');
             expect(eventInfo.type).toBe('intrusion_detection.alert');
             expect(eventInfo).toHaveProperty('content');
-            let content = eventInfo.content;
+            const content = eventInfo.content;
             expect(content).toHaveProperty('video');
             expect(content).toHaveProperty('metadata');
             expect(content).toHaveProperty('thumbnail');
@@ -201,7 +190,7 @@ describe('Analyzer Operations: ', () => {
                 json: true,
                 resolveWithFullResponse: true
             };
-            let result = await request(options);
+            const result = await request(options);
             expect(result.statusCode).toBe(HttpStatus.NO_CONTENT);
             done();
         });
