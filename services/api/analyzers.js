@@ -265,12 +265,18 @@ function deleteAnalyzer(req, res, next) {
                 return next(createError(500, reply['error']['message']))
             }
             closeResponse()
-            models['analyzers'].findByIdAndRemove(id, (err) => {
-                if (err) {
-                    return next(createError(500, null, err))
-                }
-                res.status(204).send()
+            models['analyzers'].findByIdAndRemove(id)
+            .then(() => {
+                // delete the corresponding events
+                return models['events'].deleteMany({analyzerId: id});
             })
+            .then(() => {
+                res.status(204).send();
+            })
+            .catch((err) => {
+                return next(createError(500, null, err))
+            });
+
         })
     })
 }
