@@ -107,21 +107,24 @@ async function getSettings(req, res, next) {
     if(result.mode === 'dhcp') {
         result.netmask = undefined;
         result.gateway = undefined;
-        if(result.status != 'done') {
 
-            // Ray: when users set dhcp without port connected,
-            // the port cannot get IP.
-            // whenever user connect the port, the port will receive IP soon.
-            // then the status of the port should be update
-            let dhcp_address = getInterfaceIp(dataPortInterface);
-            if (dhcp_address) {
-                result.address = dhcp_address;
-                result.status = 'done';
-                await settingsModel.updateAsync({'_id': 1}, result, {'upsert': true});
-            }
-            else {
-                result.address = 'None';
-            }
+        // Ray: when users set dhcp without port connected,
+        // the port cannot get IP.
+        // whenever user connect the port, the port will receive IP soon.
+        // then the status of the port should be update
+
+        // on the other hand, whenever the port disconnected,
+        // the dhcp ip will be invalid, then the status should be updated
+
+        let dhcp_address = getInterfaceIp(dataPortInterface);
+        if (dhcp_address) {
+            result.address = dhcp_address;
+            result.status = 'done';
+            await settingsModel.updateAsync({'_id': 1}, result, {'upsert': true});
+        }
+        else {
+            result.address = 'None';
+            result.status = 'failed';
         }
     }
     res.status(200).send(result);
