@@ -156,8 +156,8 @@ async function createDefaultNetworkSetting() {
  */
 routesWithAuth(
     router,
-    ['get', '/settings', getSettings],
-    ['patch', '/settings', validateSettingPatch, patchSettings],
+    ['get', '/settings/networking', getSettings],
+    ['patch', '/settings/networking', validateSettingPatch, patchSettings],
 )
 
 module.exports = {
