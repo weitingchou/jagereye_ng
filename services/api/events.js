@@ -27,8 +27,8 @@ const eventQuerySchema = {
         timestamp: {
             type: 'object',
             properties: {
-                start: {type: 'integer'},
-                end: {type: 'integer'}
+                start: {type: 'number'},
+                end: {type: 'number'}
             },
             additionalProperties: false
         },
