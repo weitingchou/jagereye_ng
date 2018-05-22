@@ -11,11 +11,15 @@ const DATABASE_SCHEMA_PATH = '../../shared/database.json';
 
 try {
     const {
-        db_host: dbHost,
         expiration_days: expirationDays,
         max_event_records: maxEventRecords,
         repeat_period_mins: repeatPeriodMins,
     } = config.services.expiration.params;
+    const {
+        db_name: dbName,
+        ports,
+    } = config.services.database;
+    const dbHost = `mongodb://localhost:${ports.client}/${dbName}`
 
     const job = new CronJob(`00 */${repeatPeriodMins} * * * *`, async () => {
         try {

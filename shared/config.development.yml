@@ -43,8 +43,6 @@ services:
         version: "0.0.1"
         network_mode: host
         params:
-            # Database host URL.
-            db_host: 'mongodb://localhost:27017/jager_test'
             # Expiration period in days.
             expiration_days: 30
             # The maximum allowance of event records.

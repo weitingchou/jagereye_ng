@@ -62,7 +62,7 @@ class EventAgent {
         if (count > maxNum) {
             await this.delete([{
                 $sort: {
-                    timestap: -1
+                    timestamp: 1
                 },
             }, {
                 $limit: count - maxNum
@@ -86,6 +86,8 @@ class EventAgent {
         // Collect of the object keys stored in the contents.
         forEach(events, (event) => {
             forEach(event.content, (value) => {
+                // Each type of events has its own content structure. To
+                // generalize, we assume object key is stored in string type.
                 if (isString(value)) {
                     objKeys.push(value);
                 }
