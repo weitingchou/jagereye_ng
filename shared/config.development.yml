@@ -14,7 +14,7 @@ services:
             secret: "jagereye_dev"
     database:
         version: "mongo-3.6.0"
-        db_name: jagereye-dev
+        db_name: jager_test
         network_mode: host
         ports:
             client: "27017"
