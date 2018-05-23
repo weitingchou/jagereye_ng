@@ -5,8 +5,6 @@ const video = require('./video/app.js');
 const { resetDatabse, request, createWebSocket } = require('./utils');
 const { WS_TIMEOUT } = require('./constants');
 
-const videoAppPort = 8081;
-
 describe('Analyzer Operations: ', () => {
     describe('green path(create => start => get status => delete): ', () => {
         let adminToken = null;
@@ -18,7 +16,7 @@ describe('Analyzer Operations: ', () => {
             name: 'Front Gate 1',
             source: {
                 mode: 'streaming',
-                url: `http://localhost:${videoAppPort}/video.mp4`
+                url: video.url,
             },
             pipelines: [{
                 type: 'IntrusionDetection',
@@ -43,7 +41,7 @@ describe('Analyzer Operations: ', () => {
 
         beforeAll(async () => {
             // Create an application that serves the video.
-            videoApp = new video.VideoApp(videoAppPort);
+            videoApp = new video.VideoApp();
             videoApp.start();
 
             // Reset the database to initial state.
