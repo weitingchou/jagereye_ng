@@ -8,13 +8,10 @@ const fs = require('fs')
 const forEach = require('lodash/forEach');
 const isString = require('lodash/isString');
 const map = require('lodash/map');
-const Promise = require('bluebird');
-const S3 = require('aws-sdk/clients/s3');
-
 const router = express.Router()
 
+const objectStore = require('./objectStore');
 const msg = JSON.parse(fs.readFileSync('../../shared/messaging.json', 'utf8'))
-const config = require('./config');
 const MAX_ANALYZERS = 8
 const NUM_OF_BRAINS = 1
 const DEFAULT_REQUEST_TIMEOUT = 15000
@@ -288,7 +285,7 @@ function deleteAnalyzer(req, res, next) {
                     });
                 });
                 // Delete all objects by keys.
-                return deleteObjects(objKeys).then(() => {return events});
+                return objectStore.deleteObjects(objKeys).then(() => {return events});
             })
             .then((events) => {
                 // delete all corresponding events
@@ -311,46 +308,6 @@ function deleteAnalyzer(req, res, next) {
             });
 
         })
-    })
-}
-
-function deleteObjects(keys) {
-    return new Promise((resolve, reject) => {
-        // Get configurations.
-        const { obj_storage: objectStorageConfig } = config.services;
-        const {
-            endpoint_url: endpoint,
-            bucket_name: bucketName,
-        } = objectStorageConfig.params;
-        const {
-            access_key: accessKeyId,
-            secret_key: secretAccessKey,
-        } = objectStorageConfig.credentials;
-
-        // Connect to object store.
-        const store = new S3({
-            endpoint,
-            accessKeyId,
-            secretAccessKey,
-            s3ForcePathStyle: true,
-        });
-
-        // The parameters of objects deletion.
-        const params = {
-            Bucket: bucketName,
-            Delete: {
-                Objects: map(keys, key => ({ Key: key }))
-            },
-        };
-
-        // Delete objects by the given keys.
-        store.deleteObjects(params, (err, data) => {
-            if (err) {
-                reject(err)
-            } else {
-                resolve()
-            }
-        });
     })
 }
 

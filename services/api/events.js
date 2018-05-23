@@ -1,9 +1,12 @@
 const express = require('express')
 const router = express.Router()
 const Ajv = require('ajv');
-const { createError } = require('./utils')
+const forEach = require('lodash/forEach');
+const isString = require('lodash/isString');
 
+const { createError } = require('./utils')
 const { routesWithAuth } = require('./auth')
+const objectStore = require('./objectStore');
 
 const mongoose = require('mongoose')
 const ObjectId = mongoose.Types.ObjectId;
@@ -86,6 +89,10 @@ function searchEvents(req, res, next) {
     if(body['events']) {
         let eventIdQuery = {};
         if (body['events']['gt']) {
+            // TODO: need error handling,
+            // when body['events']['gt'] is not object id format
+            // it will throw error.
+            // All of the below
             eventIdQuery.$gt = ObjectId(body['events']['gt'])
         }
         if (body['events']['lt']) {
@@ -115,6 +122,46 @@ function searchEvents(req, res, next) {
     })
 }
 
+function deleteEvent(req, res, next) {
+    let eventId = null;
+    try {
+        eventId = ObjectId(req.params['id']);
+    }
+    catch(err) {
+        // TODO: logging
+        console.error(err);
+        return next(createError(404, {msg: 'invalid event id'}))
+    }
+    eventModel.findById(eventId)
+    .then((eventInfo) => {
+        if (!eventInfo) {
+            return next(createError(404, {msg: 'event not found'}))
+        }
+
+        // id event exist, then delete objects of the event
+        objKeys = [];
+        forEach(eventInfo.content, (value) => {
+            // Each type of events has its own content structure. To
+            // generalize, we assume object key is stored in string type.
+            if (isString(value)) {
+                objKeys.push(value);
+            }
+        });
+        return objectStore.deleteObjects(objKeys)
+        .then(() => {
+            // delete the event
+            return eventModel.findByIdAndRemove(eventId);
+        })
+        .then(() => {
+            return res.status(200).send();
+        })
+    })
+    .catch((err) => {
+        // TODO: logging
+        console.error(err)
+        return next(createError(500, null))
+    });
+}
 
 /*
  * Routing Table
@@ -122,6 +169,7 @@ function searchEvents(req, res, next) {
 routesWithAuth(
     router,
     ['post', '/events', validateEventQuery, searchEvents],
+    ['delete', '/event/:id', deleteEvent],
 )
 
 module.exports = router
