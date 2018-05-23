@@ -1,52 +1,68 @@
-const request = require('request-promise');
 const HttpStatus = require('http-status-codes');
-const WebSocket = require('ws');
-const MongoClient = require('mongodb').MongoClient;
 
+const config = require('./config');
 const video = require('./video/app.js');
+const { resetDatabse, request, createWebSocket } = require('./utils');
+const { WS_TIMEOUT } = require('./constants');
 
 const videoAppPort = 8081;
 
 describe('Analyzer Operations: ', () => {
     describe('green path(create => start => get status => delete): ', () => {
+        let adminToken = null;
         let analyzerId = null;
         let videoApp = null;
         const testStartTime = (new Date().getTime() / 1000)
 
         const analyzerInfo = {
-            "name": "Front Gate 1",
-            "source": {
-                "mode": "streaming",
-                "url": "http://localhost:"+videoAppPort+"/video.mp4"
+            name: 'Front Gate 1',
+            source: {
+                mode: 'streaming',
+                url: `http://localhost:${videoAppPort}/video.mp4`
             },
-            "pipelines": [
-                {
-                    "type": "IntrusionDetection",
-                    "params": {
-                        "roi": [
-                            {"x": 200.1,"y": 100.01},
-                            {"x": 400.1,"y": 100.01},
-                            {"x": 400.1, "y": 600.01},
-                            {"x": 200.1, "y": 600.01}
-                        ],
-                        "triggers": ["person"]
-                    }
+            pipelines: [{
+                type: 'IntrusionDetection',
+                params: {
+                    roi: [{
+                        x: 0.156257813,
+                        y: 0.138902778
+                    }, {
+                        x: 0.312507813,
+                        y: 0.138902778
+                    }, {
+                        x: 0.312507813,
+                        y: 0.833347222,
+                    }, {
+                        x: 0.156257813,
+                        y: 0.833347222,
+                    }],
+                    triggers: ['person'],
                 }
-            ]
+            }]
         };
 
         beforeAll(async () => {
+            // Create an application that serves the video.
             videoApp = new video.VideoApp(videoAppPort);
             videoApp.start();
 
-            const mongoConn = await MongoClient.connect('mongodb://localhost:27017');
-            const mongoDB = mongoConn.db('jager_test');
-            const analColl = mongoDB.collection('analyzers');
-            const eventColl = mongoDB.collection('events');
-            await analColl.remove({});
-            await eventColl.remove({});
-            mongoConn.close();
-            return;
+            // Reset the database to initial state.
+            await resetDatabse();
+
+            // Get the admin token.
+            const {
+                username: adminUsername,
+                default_password: adminPassword,
+            } = config.services.api.admin;
+            const loginAdminResult = await request({
+                url: 'login',
+                method: 'POST',
+                body: {
+                    username: adminUsername,
+                    password: adminPassword,
+                },
+            });
+            adminToken = loginAdminResult.body.token;
         });
 
         afterAll(() => {
@@ -54,15 +70,13 @@ describe('Analyzer Operations: ', () => {
         });
 
         test('create an analyzer', async (done) => {
-            let postData = analyzerInfo;
-            let options =  {
+            const result = await request({
+                url: 'analyzers',
                 method: 'POST',
-                uri: 'http://localhost:5000/api/v1/analyzers',
-                body: postData,
-                json: true,
-                resolveWithFullResponse: true
-            };
-            const result = await request(options);
+                body: analyzerInfo,
+                token: adminToken,
+            });
+
             expect(result.statusCode).toBe(HttpStatus.CREATED);
             expect(result).toHaveProperty('body');
             expect(result.body).toHaveProperty('_id');
@@ -71,28 +85,24 @@ describe('Analyzer Operations: ', () => {
         });
         // ----- test('create analyzer')
 
-        test('start the analyzer', async (done) => {
-            let options =  {
+        test('start the analyzer', async () => {
+            const result = await request({
+                url: `analyzer/${analyzerId}/start`,
                 method: 'POST',
-                uri: 'http://localhost:5000/api/v1/analyzer/' + analyzerId + '/start',
-                json: true,
-                resolveWithFullResponse: true
-            };
-            const result = await request(options);
+                token: adminToken,
+            });
 
             expect(result.statusCode).toBe(HttpStatus.NO_CONTENT);
-            done();
         });
         // ----- test('start the analyzer')
 
-        test('get status of the analyzer', async (done) => {
-            let options =  {
+        test('get status of the analyzer', async () => {
+            const result = await request({
                 method: 'GET',
-                uri: 'http://localhost:5000/api/v1/analyzer/' + analyzerId,
-                json: true,
-                resolveWithFullResponse: true
-            };
-            const result = await request(options);
+                url: `analyzer/${analyzerId}`,
+                token: adminToken,
+            });
+
             expect(result.statusCode).toBe(HttpStatus.OK);
             expect(result).toHaveProperty('body');
             expect(result.body).toHaveProperty('_id');
@@ -104,14 +114,16 @@ describe('Analyzer Operations: ', () => {
             expect(result.body).toHaveProperty('pipelines');
             expect(result.body.pipelines).toEqual(analyzerInfo.pipelines);
             expect(result.body).toHaveProperty('status');
-            expect(result.body.status).toBe('running');
-
-            done();
+            // The status may be 'starting' or 'running' after starting the analyzer.
+            expect(
+                result.body.status === 'starting' ||
+                result.body.status === 'running'
+            ).toBe(true);
         });
         // ----- test('get status of the analyzer')
 
-        test('wait for notification', async (done) => {
-            const ws = new WebSocket('ws://localhost:5000/notification');
+        test('wait for notification', (done) => {
+            const ws = createWebSocket();
 
             ws.on('message', function incoming(data) {
                 data = data.replace(/'/g, '"');
@@ -138,28 +150,24 @@ describe('Analyzer Operations: ', () => {
                 ws.close();
                 done();
             });
-
-        });
+        }, WS_TIMEOUT);
         // ----- test('wait for events')
 
-        test('query events', async (done) => {
+        test('query events', async () => {
             let now = (new Date().getTime() / 1000)
-            let postData = {
-                timestamp: {
-                    start: testStartTime,
-                    end: now
-                },
-                analyzers: [analyzerId]
-            };
-
-            let options =  {
+            const result = await request({
+                url: 'events',
                 method: 'POST',
-                uri: 'http://localhost:5000/api/v1/events',
-                body: postData,
-                json: true,
-                resolveWithFullResponse: true
-            };
-            const result = await request(options);
+                body: {
+                    timestamp: {
+                        start: testStartTime,
+                        end: now
+                    },
+                    analyzers: [analyzerId]
+                },
+                token: adminToken,
+            });
+
             expect(result.statusCode).toBe(HttpStatus.OK);
             expect(result).toHaveProperty('body');
 
@@ -178,21 +186,17 @@ describe('Analyzer Operations: ', () => {
             expect(content).toHaveProperty('metadata');
             expect(content).toHaveProperty('thumbnail');
             expect(content).toHaveProperty('triggered');
-
-            done();
         });
         // ----- test('query events')
 
-        test('delete the analyzer', async (done) => {
-            let options =  {
+        test('delete the analyzer', async () => {
+            const result = await request({
+                url: `analyzer/${analyzerId}`,
                 method: 'DELETE',
-                uri: 'http://localhost:5000/api/v1/analyzer/' + analyzerId,
-                json: true,
-                resolveWithFullResponse: true
-            };
-            const result = await request(options);
+                token: adminToken,
+            });
+
             expect(result.statusCode).toBe(HttpStatus.NO_CONTENT);
-            done();
         });
         // ----- test('delete the analyzer')
     });

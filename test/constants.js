@@ -6,7 +6,10 @@ const ROLES = {
     READER: 'reader',
 }
 
+const WS_TIMEOUT = 10000;
+
 module.exports = {
     ROLES,
     API_HOST,
+    WS_TIMEOUT,
 }

@@ -1,6 +1,7 @@
 const fs = require('fs');
 const mongoose = require('mongoose');
 const httpRequest = require('request-promise');
+const WebSocket = require('ws');
 
 const config = require('./config');
 const { API_HOST, ROLES } = require('./constants');
@@ -17,6 +18,7 @@ const {
 const SCHEMA_URL = '../shared/database.json';
 const DB_URL = `mongodb://${API_HOST}:${dbPorts.client}/${dbName}`;
 const API_URI_PREFIX = `http://${API_HOST}:${apiPorts.client}/${apiBaseUrl}`;
+const WS_URI = `http://${API_HOST}:${apiPorts.client}/notification`;
 
 async function resetDatabse() {
     // Drop the database.
@@ -63,7 +65,12 @@ async function request({ url, method, body, token }) {
     }
 }
 
+function createWebSocket() {
+    return new WebSocket(WS_URI);
+}
+
 module.exports = {
     resetDatabse,
     request,
+    createWebSocket,
 }
