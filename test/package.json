@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "test": "jest --runInBand"
+    "test": "jest --runInBand --forceExit"
   },
   "devDependencies": {
     "express": "^4.16.3",

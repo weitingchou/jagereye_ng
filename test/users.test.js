@@ -320,7 +320,7 @@ describe('Users Operations', () => {
             testGetUserPasswordLastUpdated(result);
         });
 
-        test('Delete admin that is not allowed to be deleted', async () => {
+        test('Delete admin that is not allowed', async () => {
             const result = await request({
                 url: `user/${adminId}`,
                 method: 'DELETE',
@@ -340,6 +340,42 @@ describe('Users Operations', () => {
 
             // Test the status code, must be 204 NO_CONTENT.
             expect(result.statusCode).toBe(HttpStatus.NO_CONTENT);
+        });
+
+        test('Delete reader after it is deleted', async () => {
+            const result = await request({
+                url: `user/${readerId}`,
+                method: 'DELETE',
+                token: adminToken,
+            });
+
+            // Test the status code, must be 404.
+            expect(result.statusCode).toBe(HttpStatus.NOT_FOUND);
+        });
+
+        test('Get user information of reader after it is deleted', async () => {
+            const result = await request({
+                url: `user/${readerId}`,
+                method: 'GET',
+                token: adminToken,
+            });
+
+            // Test the status code, must be 404.
+            expect(result.statusCode).toBe(HttpStatus.NOT_FOUND);
+        });
+
+        test('Change password reader after it is deleted', async () => {
+            const result = await request({
+                url: `user/${readerId}/password`,
+                method: 'POST',
+                body: {
+                    password: reader.newPassword,
+                },
+                token: adminToken,
+            });
+
+            // Test the status code, must be 404.
+            expect(result.statusCode).toBe(HttpStatus.NOT_FOUND);
         });
 
         test('Get users that contains only admin and writer', async () => {
@@ -469,8 +505,8 @@ describe('Users Operations', () => {
                 token: writerToken,
             });
 
-            // Test the status code, must be 401 UNAUTHORIZED.
-            expect(result.statusCode).toBe(HttpStatus.UNAUTHORIZED);
+            // Test the status code, must be 403 FORBIDDEN.
+            expect(result.statusCode).toBe(HttpStatus.FORBIDDEN);
         });
 
         test('Get users, which is not allowed', async () => {
@@ -480,8 +516,8 @@ describe('Users Operations', () => {
                 token: writerToken,
             });
 
-            // Test the status code, must be 401 UNAUTHORIZED.
-            expect(result.statusCode).toBe(HttpStatus.UNAUTHORIZED);
+            // Test the status code, must be 403 FORBIDDEN.
+            expect(result.statusCode).toBe(HttpStatus.FORBIDDEN);
         });
 
         test('Get user information of admin, which is not allowed', async () => {
@@ -509,26 +545,186 @@ describe('Users Operations', () => {
             expect(result.statusCode).toBe(HttpStatus.BAD_REQUEST);
         });
 
-        test('Delete admin, which is not allowed', async () => {
-            const result = await request({
-                url: `user/${adminId}`,
-                method: 'DELETE',
-                token: writerToken,
-            });
-
-            // Test the status code, must be 400 BAD_REQUEST.
-            expect(result.statusCode).toBe(HttpStatus.BAD_REQUEST);
-        });
-
-        test('Delete writer', async () => {
+        test('Delete writer, which is not allowed', async () => {
             const result = await request({
                 url: `user/${writerId}`,
                 method: 'DELETE',
                 token: writerToken,
             });
 
+            // Test the status code, must be 403 FORBIDDEN.
+            expect(result.statusCode).toBe(HttpStatus.FORBIDDEN);
+        });
+    });
+
+    describe('In view of reader', () => {
+        test('Admin creates reader again then login reader with right password', async () => {
+            const createReaderResult = await request({
+                url: 'users',
+                method: 'POST',
+                body: {
+                    username: reader.username,
+                    password: reader.password,
+                    role: ROLES.READER,
+                },
+                token: adminToken,
+            });
+
+            const loginReaderResult = await request({
+                url: 'login',
+                method: 'POST',
+                body: {
+                    username: reader.username,
+                    password: reader.password,
+                },
+            });
+
+            testLoginResult(loginReaderResult);
+
+            readerId = createReaderResult.body._id;
+            readerToken = loginReaderResult.body.token;
+        });
+
+        test('Login reader with wrong password', async () => {
+            const result = await request({
+                url: 'login',
+                method: 'POST',
+                body: {
+                    username: reader.username,
+                    password: `${reader.password}_wrong`,
+                },
+            });
+
+            // Test the status code, must be 401 UNAUTHORIZED.
+            expect(result.statusCode).toBe(HttpStatus.UNAUTHORIZED);
+        });
+
+        test('Get user information of reader', async () => {
+            const result = await request({
+                url: `user/${readerId}`,
+                method: 'GET',
+                token: readerToken,
+            });
+
+            testGetUserResult(result, {
+                _id: readerId,
+                username: reader.username,
+                role: ROLES.READER,
+            });
+        });
+
+        test('Change password of reader', async () => {
+            const result = await request({
+                url: `user/${readerId}/password`,
+                method: 'PATCH',
+                body: {
+                    password: reader.newPassword,
+                },
+                token: readerToken,
+            });
+
             // Test the status code, must be 204 NO_CONTENT.
             expect(result.statusCode).toBe(HttpStatus.NO_CONTENT);
+        });
+
+        test('Get user informaiton of reader again', async () => {
+            const result = await request({
+                url: `user/${readerId}`,
+                method: 'GET',
+                token: readerToken,
+            });
+
+            testGetUserPasswordLastUpdated(result);
+        });
+
+        test('Login reader again with new password', async () => {
+            const result = await request({
+                url: 'login',
+                method: 'POST',
+                body: {
+                    username: reader.username,
+                    password: reader.newPassword,
+                },
+            });
+
+            testLoginResult(result);
+        });
+
+        test('Login reader again with old password', async () => {
+            const result = await request({
+                url: 'login',
+                method: 'POST',
+                body: {
+                    username: reader.username,
+                    password: reader.password,
+                },
+            });
+
+            // Test the status code, must be 401 UNAUTHORIZED.
+            expect(result.statusCode).toBe(HttpStatus.UNAUTHORIZED);
+        });
+
+        test('Create a new user, which is not allowed', async () => {
+            const result = await request({
+                url: 'users',
+                method: 'POST',
+                body: {
+                    username: reader.username,
+                    password: reader.password,
+                    role: ROLES.reader,
+                },
+                token: readerToken,
+            });
+
+            // Test the status code, must be 403 FORBIDDEN.
+            expect(result.statusCode).toBe(HttpStatus.FORBIDDEN);
+        });
+
+        test('Get users, which is not allowed', async () => {
+            const result = await request({
+                url: 'users',
+                method: 'GET',
+                token: readerToken,
+            });
+
+            // Test the status code, must be 403 FORBIDDEN.
+            expect(result.statusCode).toBe(HttpStatus.FORBIDDEN);
+        });
+
+        test('Get user information of admin, which is not allowed', async () => {
+            const result = await request({
+                url: `user/${adminId}`,
+                method: 'GET',
+                token: readerToken,
+            });
+
+            // Test the status code, must be 400 BAD_REQUEST.
+            expect(result.statusCode).toBe(HttpStatus.BAD_REQUEST);
+        });
+
+        test('Change password of admin, which is not allowed', async () => {
+            const result = await request({
+                url: `user/${adminId}/password`,
+                method: 'PATCH',
+                body: {
+                    password: admin.newPassword,
+                },
+                token: readerToken,
+            });
+
+            // Test the status code, must be 400 BAD_REQUEST.
+            expect(result.statusCode).toBe(HttpStatus.BAD_REQUEST);
+        });
+
+        test('Delete reader, which is not allowed', async () => {
+            const result = await request({
+                url: `user/${readerId}`,
+                method: 'DELETE',
+                token: readerToken,
+            });
+
+            // Test the status code, must be 403 FORBIDDEN.
+            expect(result.statusCode).toBe(HttpStatus.FORBIDDEN);
         });
     });
 });
