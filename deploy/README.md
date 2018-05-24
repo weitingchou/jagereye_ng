@@ -1,5 +1,39 @@
 # Deployment 
 
+### Disable auto upgrade of OS
+The Ubuntu OS use cron-daily to do "unattended-upgrades". Once it leads to replace the nvidia driver.
+Then the nvidia-docker cannot work with msg as below:
+``` shell
+nvidia-docker | 2018/01/11 15:09:04 Error: nvml: Driver/library version mismatch
+```
+So we need to disable "unattended-upgrades".
+
+1. Edit /etc/apt/apt.conf.d/20auto-upgrades:  
+change 2 properties from
+```
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+```
+to
+
+```
+APT::Periodic::Update-Package-Lists "0";
+APT::Periodic::Unattended-Upgrade "0";
+```
+
+### Enable syslog server
+1. Edit /etc/rsyslog.conf:  
+change 2 properties from
+```
+#module(load="imudp")
+#input(type="imudp" port="514")
+```
+to
+```
+module(load="imudp")
+input(type="imudp" port="514")
+```
+
 ### For API /settings/networking
 
 ##### Set fixed IP for control port
