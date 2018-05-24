@@ -21,7 +21,7 @@ APT::Periodic::Update-Package-Lists "0";
 APT::Periodic::Unattended-Upgrade "0";
 ```
 
-### Enable syslog server
+### Enable & config syslog server
 1. Edit /etc/rsyslog.conf:  
 change 2 properties from
 ```
@@ -33,6 +33,16 @@ to
 module(load="imudp")
 input(type="imudp" port="514")
 ```
+2. Create a file /etc/rsyslog.d/30-jager.conf  
+It is the config to redirect specific log facility to a file.  
+For example:  
+```
+local1.info                     /var/log/jager/jager.info
+local1.debug                    /var/log/jager/jager.debug
+```
+
+Then if you just inject logging code with the setting 'local1' as facility in logging library
+
 
 ### For API /settings/networking
 
