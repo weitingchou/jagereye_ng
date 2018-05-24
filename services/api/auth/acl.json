@@ -119,6 +119,14 @@
         ],
         "action": "allow"
     }, {
+        "resource": "analyzer/:id/start",
+        "methods": [],
+        "action": "allow"
+    }, {
+        "resource": "analyzer/:id/stop",
+        "methods": [],
+        "action": "allow"
+    }, {
         "resource": "events",
         "methods": [
             "POST"
