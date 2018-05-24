@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import os
 import time
 import threading
 import signal
@@ -294,9 +295,15 @@ class VideoStreamWriter(object):
         if self._writer.isOpened():
             raise RuntimeError("Stream is already opened")
 
-        gst_pipeline = ('appsrc ! autovideoconvert ! x264enc ! matroskamux !'
-                        ' filesink location={}'.format(filename))
-        if not self._writer.open(gst_pipeline, 0, fps, size):
+        _, ext = os.path.splitext(filename)
+        if ext == ".mp4":
+            filenamee = ('appsrc ! autovideoconvert ! x264enc ! matroskamux !'
+                         ' filesink location={}'.format(filename))
+            fourcc = 0
+        else:
+            fourcc = cv2.VideoWriter_fourcc(*'XVID')
+
+        if not self._writer.open(filename, fourcc, fps, size):
             raise RuntimeError("Can't open video file {}"
                                .format(filename))
 
