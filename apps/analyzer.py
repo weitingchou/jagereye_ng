@@ -8,7 +8,7 @@ from dask.distributed import LocalCluster, Client
 from multiprocessing import Process, Pipe, TimeoutError
 
 from utils import AsyncTimer
-from intrusion_detection import IntrusionDetector
+from intrusion_detection import IntrusionDetectionPipeline
 
 from jagereye_ng import video_proc as vp
 from jagereye_ng import gpu_worker
@@ -29,7 +29,7 @@ def create_pipeline(anal_id, pipelines, frame_size):
     for p in pipelines:
         if p["type"] == "IntrusionDetection":
             params = p["params"]
-            result.append(IntrusionDetector(
+            result.append(IntrusionDetectionPipeline(
                 anal_id,
                 params["roi"],
                 params["triggers"],
@@ -228,21 +228,10 @@ def analyzer_main_func(signal, cluster, anal_id, name, source, pipelines):
 
         while True:
             frames = src_reader.read(batch_size=5)
-            motion = vp.detect_motion(frames)
+            motions = vp.detect_motion(frames)
 
-            results = [p.run(frames, motion) for p in pipelines]
-
-            for event in results:
-                if event is not None:
-                    message = {
-                        "analyzerId": anal_id,
-                        "timestamp": event.timestamp,
-                        "date": datetime.datetime.utcfromtimestamp(event.timestamp),
-                        "type": event.name,
-                        "content": event.content
-                    }
-                    notification.push("Analyzer", message, dask)
-                    database.save_event(message, dask)
+            for p in pipelines:
+                p.run(frames, motions)
 
             if signal.poll() and signal.recv() == "stop":
                 break

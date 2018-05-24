@@ -14,7 +14,11 @@ def detect_motion(frames, sensitivity=80):
         sensitivity: The sensitivity of motion detection, range from 1
                      to 100. Defaults to 80.
     Returns:
-        The frames that have being detected with motion.
+        A dict with the following keys:
+            frames (list): frames that have motion difference against the first
+                frame in the input frames.
+            index (list): the index of the detected frames in the input frame
+                list.
     """
     sensitivity_clamp = max(1, min(sensitivity, 100))
     threshold = (100 - sensitivity_clamp) * 0.05
