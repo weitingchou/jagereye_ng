@@ -297,7 +297,7 @@ class VideoStreamWriter(object):
 
         _, ext = os.path.splitext(filename)
         if ext == ".mp4":
-            filenamee = ('appsrc ! autovideoconvert ! x264enc ! matroskamux !'
+            filename = ('appsrc ! autovideoconvert ! x264enc ! matroskamux !'
                          ' filesink location={}'.format(filename))
             fourcc = 0
         else:
