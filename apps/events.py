@@ -58,7 +58,7 @@ class EventVideoWriter(object):
         if not os.path.exists(tmp_dir):
             os.makedirs(tmp_dir)
 
-        self._metadata = {"fsp": fps, "start": timestamp}
+        self._metadata = {"fps": fps, "start": timestamp}
         try:
             self._event_name = metadata["event_name"]
             event_custom = metadata["event_custom"]
