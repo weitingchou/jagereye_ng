@@ -53,6 +53,13 @@ services:
             # Repeat period of expiration function (in minutes).
             repeat_period_mins: 10
 apps:
+    base:
+        read_batch_size: 5
+        motion_threshold: 80
     intrusion_detection:
         version: "0.0.1"
         network_mode: host
+        detect_threshold: 0.25
+        video_format: "mp4"
+        fps: 15
+        history_len: 3
