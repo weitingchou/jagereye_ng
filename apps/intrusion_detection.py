@@ -354,10 +354,11 @@ class IntrusionDetectionPipeline(object):
         self._database.save_event(message)
 
         # Push notification
+        mlsec = repr(timestamp).split(".")[1][:3]
         date_str = (datetime.datetime
                     .utcfromtimestamp(timestamp)
                     .replace(tzinfo=timezone("UTC"))
-                    .strftime("%Y-%m-%dT%H:%M:%SZ"))
+                    .strftime("%Y-%m-%dT%H:%M:%S.{}Z".format(mlsec)))
         message.update({"date": date_str})
         self._notification.push("Analyzer", message)
 
