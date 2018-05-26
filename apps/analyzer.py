@@ -8,13 +8,14 @@ from dask.distributed import LocalCluster, Client
 from multiprocessing import Process, Pipe, TimeoutError
 
 from utils import AsyncTimer
-from intrusion_detection import IntrusionDetector
+from intrusion_detection import IntrusionDetectionPipeline
 
 from jagereye_ng import video_proc as vp
 from jagereye_ng import gpu_worker
 from jagereye_ng.api import APIConnector
 from jagereye_ng.io.streaming import VideoStreamReader, ConnectionError
 from jagereye_ng.io import io_worker, notification, database
+from jagereye_ng.util.generic import get_config
 from jagereye_ng import logging
 
 
@@ -28,12 +29,17 @@ def create_pipeline(anal_id, pipelines, frame_size):
     result = []
     for p in pipelines:
         if p["type"] == "IntrusionDetection":
+            config = get_config()["apps"]["intrusion_detection"]
             params = p["params"]
-            result.append(IntrusionDetector(
+            result.append(IntrusionDetectionPipeline(
                 anal_id,
                 params["roi"],
                 params["triggers"],
-                frame_size))
+                frame_size,
+                config["detect_threshold"],
+                config["video_format"],
+                config["fps"],
+                config["history_len"]))
     return result
 
 
@@ -204,6 +210,7 @@ class Analyzer():
 
 def analyzer_main_func(signal, cluster, anal_id, name, source, pipelines):
     logging.info("Starts running Analyzer: {}".format(name))
+    config = get_config()["apps"]["base"]
 
     src_reader = VideoStreamReader()
     try:
@@ -227,22 +234,11 @@ def analyzer_main_func(signal, cluster, anal_id, name, source, pipelines):
         signal.send("ready")
 
         while True:
-            frames = src_reader.read(batch_size=5)
-            motion = vp.detect_motion(frames)
+            frames = src_reader.read(batch_size=config["read_batch_size"])
+            motions = vp.detect_motion(frames, config["motion_threshold"])
 
-            results = [p.run(frames, motion) for p in pipelines]
-
-            for event in results:
-                if event is not None:
-                    message = {
-                        "analyzerId": anal_id,
-                        "timestamp": event.timestamp,
-                        "date": datetime.datetime.utcfromtimestamp(event.timestamp),
-                        "type": event.name,
-                        "content": event.content
-                    }
-                    notification.push("Analyzer", message, dask)
-                    database.save_event(message, dask)
+            for p in pipelines:
+                p.run(frames, motions)
 
             if signal.poll() and signal.recv() == "stop":
                 break
@@ -254,7 +250,8 @@ def analyzer_main_func(signal, cluster, anal_id, name, source, pipelines):
     finally:
         src_reader.release()
         for p in pipelines:
-            p.release()
+            if hasattr(p, "release"):
+                p.release()
         dask.close()
         logging.info("Analyzer terminated: {}".format(name))
 
