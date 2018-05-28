@@ -83,6 +83,12 @@ class Generator(object):
 
     def _get_app_context(self):
         context = self._config['apps']
+
+        # Remove the context of "base" because it is not an application to run.
+        # TODO(JiaKuan Su): We need a standard to identify each one is an
+        #                   application/service or not.
+        context.pop('base', None)
+
         return context
 
     def generate(self, target, is_build=False):

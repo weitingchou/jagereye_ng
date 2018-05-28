@@ -23,6 +23,7 @@ RUN pip3 --no-cache-dir install \
 COPY --chown=jager:jager analyzer.py .
 COPY --chown=jager:jager intrusion_detection.py .
 COPY --chown=jager:jager utils.py .
+COPY --chown=jager:jager events.py .
 COPY --chown=jager:jager coco.labels .
 
 CMD python3 analyzer.py
