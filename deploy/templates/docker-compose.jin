@@ -58,6 +58,16 @@ services:
             - JAGERENV={{environ.JAGERENV}}
             - ACCESS_KEY={{services.obj_storage.credentials.access_key}}
             - SECRET_KEY={{services.obj_storage.credentials.secret_key}}
+    prometheus:
+        {%- if build %}
+        build: "{{services.prometheus.buildpath}}"
+        {%- endif %}
+        image: "jagereye/prometheus:{{services.prometheus.version}}"
+        network_mode: "{{services.prometheus.network_mode}}"
+        ports:
+            {%- for key, port in services.prometheus.ports.items() %}
+            - "{{port}}"
+            {%- endfor %}
     {%- endif %}
     {%- if apps %}
     {%- for app, content in apps.items() %}
