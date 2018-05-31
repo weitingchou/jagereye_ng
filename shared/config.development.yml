@@ -30,18 +30,6 @@ services:
         ports:
             client: "4222"
             monitor: "8222"
-    mem_db:
-        version: "redis-4.0.6"
-        network_mode: host
-        ports:
-            client: "6379"
-    res_mgr:
-        version: "0.0.1"
-        network_mode: host
-        volumes:
-            docker_sock: /var/run/docker.sock:/var/run/docker.sock
-        worker:
-            network_mode: host
     obj_storage:
         version: "minio-RELEASE.2018-04-04T05-20-54Z"
         network_mode: host
@@ -57,7 +45,27 @@ services:
         credentials:
             access_key: 'jagereye'
             secret_key: 'jagereye'
-apps:
-    tripwire:
+    expiration:
         version: "0.0.1"
         network_mode: host
+        params:
+            # Expiration period in days.
+            expiration_days: 30
+            # The maximum allowance of event records.
+            # The number "400,000" is for 1TB storage space, it assumes each event
+            # contains about 2.2MB, including the database record, a 10-seconds video,
+            # a thumbnail and a metadata json file.
+            max_event_records: 400000
+            # Repeat period of expiration function (in minutes).
+            repeat_period_mins: 10
+apps:
+    base:
+        read_batch_size: 5
+        motion_threshold: 80
+    intrusion_detection:
+        version: "0.0.1"
+        network_mode: host
+        detect_threshold: 0.25
+        video_format: "mp4"
+        fps: 15
+        history_len: 3
