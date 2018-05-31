@@ -3,6 +3,8 @@ services:
     api:
         version: "0.0.1"
         network_mode: host
+        cap_add:
+            - NET_ADMIN
         ports:
             client: "5000"
         base_url: "api/v1"
