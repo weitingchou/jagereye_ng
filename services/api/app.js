@@ -6,6 +6,7 @@ const cors = require('cors')
 const config = require('./config')
 const { users, createAdminUser } = require('./users')
 const analyzers = require('./analyzers')
+const status = require('./status')
 const events = require('./events')
 const helpers = require('./helpers')
 
@@ -20,6 +21,7 @@ app.use(expressValidator())
 const API_ENTRY = `/${config.services.api.base_url}`
 app.use(API_ENTRY, users)
 app.use(API_ENTRY, analyzers)
+app.use(API_ENTRY, status)
 app.use(API_ENTRY, events)
 app.use(API_ENTRY, helpers)
 
