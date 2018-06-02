@@ -50,5 +50,27 @@
         },
         "source": "SUBDOC_SOURCE",
         "pipelines": [ "SUBDOC_PIPELINES" ]
+    },
+    "events": {
+        "type": {
+            "type": "string",
+            "required": true
+        },
+        "date": {
+            "type": "date",
+            "required": true
+        },
+        "timestamp": {
+            "type": "number",
+            "required": true
+        },
+        "analyzerId": {
+            "type": "string",
+            "required": true
+        },
+        "content": {
+            "type": "object",
+            "required": true
+        }
     }
 }

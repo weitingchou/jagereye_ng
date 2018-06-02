@@ -5,8 +5,12 @@ const { createError } = require('./utils')
 const { routesWithAuth } = require('./auth')
 const NATS = require('nats')
 const fs = require('fs')
+const forEach = require('lodash/forEach');
+const isString = require('lodash/isString');
+const map = require('lodash/map');
 const router = express.Router()
 
+const objectStore = require('./objectStore');
 const msg = JSON.parse(fs.readFileSync('../../shared/messaging.json', 'utf8'))
 const MAX_ANALYZERS = 8
 const NUM_OF_BRAINS = 1
@@ -278,12 +282,44 @@ function deleteAnalyzer(req, res, next) {
                 return next(createError(500, reply['error']['message']))
             }
             closeResponse()
-            models['analyzers'].findByIdAndRemove(id, (err) => {
-                if (err) {
-                    return next(createError(500, null, err))
-                }
-                res.status(204).send()
+
+            // get all corresponding events
+            models['events'].find({analyzerId: id})
+            .then((events) => {
+                // collect & delete all objects key of all events id
+                objKeys = []
+                forEach(events, (event) => {
+                    forEach(event.content, (value) => {
+                        // Each type of events has its own content structure. To
+                        // generalize, we assume object key is stored in string type.
+                        if (isString(value)) {
+                            objKeys.push(value);
+                        }
+                    });
+                });
+                // Delete all objects by keys.
+                return objectStore.deleteObjects(objKeys).then(() => {return events});
             })
+            .then((events) => {
+                // delete all corresponding events
+                const eventIds = map(events, event => event._id);
+                return models['events'].deleteMany({
+                    _id: {
+                        $in: eventIds,
+                    },
+                });
+            })
+            .then(() => {
+                // delete analyzer
+                return models['analyzers'].findByIdAndRemove(id);
+            })
+            .then(() => {
+                return res.status(204).send();
+            })
+            .catch((err) => {
+                return next(createError(500, null, err))
+            });
+
         })
     })
 }

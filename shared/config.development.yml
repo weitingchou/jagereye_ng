@@ -47,7 +47,27 @@ services:
         ports:
             client: "9090"
 
+    expiration:
+        version: "0.0.1"
+        network_mode: host
+        params:
+            # Expiration period in days.
+            expiration_days: 30
+            # The maximum allowance of event records.
+            # The number "400,000" is for 1TB storage space, it assumes each event
+            # contains about 2.2MB, including the database record, a 10-seconds video,
+            # a thumbnail and a metadata json file.
+            max_event_records: 400000
+            # Repeat period of expiration function (in minutes).
+            repeat_period_mins: 10
 apps:
+    base:
+        read_batch_size: 5
+        motion_threshold: 80
     intrusion_detection:
         version: "0.0.1"
         network_mode: host
+        detect_threshold: 0.25
+        video_format: "mp4"
+        fps: 15
+        history_len: 3
