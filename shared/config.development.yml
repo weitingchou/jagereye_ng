@@ -3,6 +3,8 @@ services:
     api:
         version: "0.0.1"
         network_mode: host
+        cap_add:
+            - NET_ADMIN
         ports:
             client: "5000"
         base_url: "api/v1"
@@ -12,6 +14,12 @@ services:
         token:
             enabled: true
             secret: "jagereye_dev"
+        settings:
+            control_port:
+                device: "enp1s0"
+                static_ip: "192.168.20.1"
+            data_port:
+                device: "enp2s0"
     database:
         version: "mongo-3.6.0"
         db_name: jagereye-dev

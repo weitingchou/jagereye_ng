@@ -51,6 +51,17 @@
         "source": "SUBDOC_SOURCE",
         "pipelines": [ "SUBDOC_PIPELINES" ]
     },
+    "settings": {
+        "_id": "Number",
+        "mode": {
+            "type": "string",
+            "required": true
+        },
+        "address": "string",
+        "netmask": "string",
+        "gateway": "string",
+        "status": "string"
+    },
     "events": {
         "type": {
             "type": "string",
