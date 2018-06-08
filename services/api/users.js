@@ -155,6 +155,10 @@ async function changePassword(req, res, next) {
     try {
         const targetUser = await models.users.findById(targetId)
 
+        if (!targetUser) {
+            return next(createError(404, 'User not existed'))
+        }
+
         // If the user changes its own password and it is not the first time
         // to be changed, then the request also needs old password.
         if (requesterId.toString() === targetId && targetUser.passwordLastUpdated) {
