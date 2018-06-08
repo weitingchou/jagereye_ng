@@ -228,7 +228,7 @@ routesWithAuth(
 routesWithAuth(
     router,
     ['get', '/user/:id', isSelfOrAdmin, getUser],
-    ['delete', '/user/:id', isSelfOrAdmin, deleteUser],
+    ['delete', '/user/:id', deleteUser],
     ['patch', '/user/:id/password', isSelfOrAdmin, changePasswordValidator, validate, changePassword],
 )
 router.post('/login', userValidator, validate, login)

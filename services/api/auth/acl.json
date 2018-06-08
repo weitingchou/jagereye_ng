@@ -8,10 +8,13 @@
 }, {
     "group": "writer",
     "permissions": [{
+        "resource": "users",
+        "methods": [],
+        "action": "allow"
+    }, {
         "resource": "user/:id",
         "methods": [
-            "GET",
-            "DELETE"
+            "GET"
         ],
         "action": "allow"
     }, {
@@ -76,10 +79,13 @@
 }, {
     "group": "reader",
     "permissions": [{
+        "resource": "users",
+        "methods": [],
+        "action": "allow"
+    }, {
         "resource": "user/:id",
         "methods": [
-            "GET",
-            "DELETE"
+            "GET"
         ],
         "action": "allow"
     }, {
@@ -117,6 +123,14 @@
         "methods": [
             "GET"
         ],
+        "action": "allow"
+    }, {
+        "resource": "analyzer/:id/start",
+        "methods": [],
+        "action": "allow"
+    }, {
+        "resource": "analyzer/:id/stop",
+        "methods": [],
         "action": "allow"
     }, {
         "resource": "events",

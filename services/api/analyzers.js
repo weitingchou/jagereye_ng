@@ -156,8 +156,7 @@ function createAnalyzer(req, res, next) {
                 return next(createError(400, null, err))
             }
             if (err.name === 'MongoError' && err.code === 11000) {
-                let dupKey = err.errmsg.slice(err.errmsg.lastIndexOf('dup key:') + 14, -3)
-                return next(createError(400, `Duplicate key error: ${dupKey}`, err))
+                return next(createError(409, 'Analyzer already exists'))
             }
             return next(createError(500, null, err))
         }
@@ -333,8 +332,7 @@ function updateAnalyzer(req, res, next) {
                 return next(createError(400, null, err))
             }
             if (err.name === 'MongoError' && err.code === 11000) {
-                let dupKey = err.errmsg.slice(err.errmsg.lastIndexOf('dup key:') + 14, -3)
-                return next(createError(400, `Duplicate key error: ${dupKey}`, err))
+                return next(createError(409, 'Analyzer already exists'))
             }
             return next(createError(500, null, err))
         }
