@@ -41,9 +41,9 @@ const createUserValidator = checkSchema({
 })
 
 const changePasswordValidator = checkSchema({
-    password: {
+    newPassword: {
         exists: true,
-        errorMessage: 'Password is required',
+        errorMessage: 'New password is required',
     },
 })
 
@@ -144,22 +144,34 @@ async function deleteUser(req, res, next) {
 }
 
 async function changePassword(req, res, next) {
-    const { id } = req.params
+    const { id: targetId } = req.params
+    const { _id: requesterId } = req.user
+    const { oldPassword, newPassword } = req.body
 
-    if (!isValidId(id)) {
+    if (!isValidId(targetId)) {
         return next(createError(400, 'Invalid ID'))
     }
 
     try {
+        const targetUser = await models.users.findById(targetId)
+
+        // If the user changes its own password and it is not the first time
+        // to be changed, then the request also needs old password.
+        if (requesterId.toString() === targetId && targetUser.passwordLastUpdated) {
+            if (oldPassword !== targetUser.password) {
+                return next(createError(400, 'Incorrect old password'))
+            }
+        }
+
         const updated = {
-            password: req.body.password,
+            password: newPassword,
             passwordLastUpdated: new Date(),
         }
         const options = {
             new: true,
             runValidators: true,
         }
-        const result = await models.users.findByIdAndUpdate(id, updated, options)
+        const result = await models.users.findByIdAndUpdate(targetId, updated, options)
 
         if (!result) {
             return next(createError(404, 'User not existed'))
