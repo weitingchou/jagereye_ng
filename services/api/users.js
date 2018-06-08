@@ -31,7 +31,7 @@ const userValidator = checkSchema({
     },
 })
 
-const createUserValidator = checkSchema({
+const roleValidator = checkSchema({
     role: {
         matches: {
             errorMessage: `Role should be "${ROLES.WRITER}" or "${ROLES.READER}"`,
@@ -183,6 +183,39 @@ async function changePassword(req, res, next) {
     }
 }
 
+async function updateRole(req, res, next) {
+    const { id: targetId } = req.params
+    const { role } = req.body
+    const { _id: requesterId } = req.user
+
+    try {
+        const targetUser = await models.users.findById(targetId)
+
+        if (!targetUser) {
+            return next(createError(404, 'User not existed'))
+        }
+
+        if (targetUser.role === ROLES.ADMIN) {
+            return next(createError(400, 'Updating admin role is not allowed'))
+        }
+
+        const updated = { role }
+        const options = {
+            new: true,
+            runValidators: true,
+        }
+        const result = await models.users.findByIdAndUpdate(targetId, updated, options)
+
+        if (!result) {
+            return next(createError(404, 'User not existed'))
+        }
+
+        return res.status(204).send()
+    } catch (err) {
+        return next(createError(500, null, err))
+    }
+}
+
 async function login(req, res, next) {
     const { username, password } = req.body
 
@@ -235,13 +268,14 @@ async function createAdminUser() {
 routesWithAuth(
     router,
     ['get', '/users', getAllUsers],
-    ['post', '/users', userValidator, createUserValidator, validate, createUser],
+    ['post', '/users', userValidator, roleValidator, validate, createUser],
 )
 routesWithAuth(
     router,
     ['get', '/user/:id', isSelfOrAdmin, getUser],
     ['delete', '/user/:id', isSelfOrAdmin, deleteUser],
     ['patch', '/user/:id/password', isSelfOrAdmin, changePasswordValidator, validate, changePassword],
+    ['patch', '/user/:id/role', roleValidator, validate, updateRole],
 )
 router.post('/login', userValidator, validate, login)
 
