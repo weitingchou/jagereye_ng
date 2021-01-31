@@ -1,4 +1,4 @@
-FROM minio/minio:RELEASE.2018-04-04T05-20-54Z
+FROM minio/minio:RELEASE.2018-05-11T00-29-24Z
 
 MAINTAINER SuJiaKuan feabries@gmail.com
 
