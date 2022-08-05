@@ -25,7 +25,7 @@
         "http-errors": "1.6.2",
         "js-yaml": "^3.11.0",
         "jsonwebtoken": "^8.2.1",
-        "mongoose": "4.13.6",
+        "mongoose": "5.7.5",
         "nats": "0.7.24",
         "npm": "^5.8.0",
         "passport": "^0.4.0",
