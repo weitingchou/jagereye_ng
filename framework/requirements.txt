@@ -4,4 +4,4 @@ dask[distributed]==0.17.4
 numpy==1.14.3
 pymongo==3.6.1
 pyyaml==3.12
-tensorflow-gpu==1.7.1
+tensorflow-gpu==2.9.3
